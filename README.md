@@ -43,7 +43,7 @@ CoinGecko API ──▶ Python extract ──▶ Snowflake ──▶ dbt ──�
 
 ## Status
 
-- [ ] **Days 1–3** — Snowflake trial account, worksheets, warehouse/role concepts, SQL warm-up
+- [x] **Days 1–3** — Snowflake trial account, worksheets, warehouse/role concepts, SQL warm-up *(done Day 1)*
 - [ ] **Days 4–6** — Python extract from CoinGecko + load to `RAW` schema
 - [ ] **Days 7–11** — dbt Core: project setup, staging → marts, sources, tests
 - [ ] **Days 12–13** — GitHub Actions daily schedule, README/architecture polish

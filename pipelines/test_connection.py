@@ -1,6 +1,6 @@
 """Day 1 sanity check: proves Python can reach your Snowflake account.
 
-Run:  .venv\Scripts\python.exe pipelines\test_connection.py
+Run:  .venv/Scripts/python.exe pipelines/test_connection.py
 """
 import os
 
@@ -26,4 +26,4 @@ with conn.cursor() as cur:
     print(cur.fetchone())
 
 conn.close()
-print("Connection OK — Python can talk to Snowflake.")
+print("Connection OK - Python can talk to Snowflake.")
