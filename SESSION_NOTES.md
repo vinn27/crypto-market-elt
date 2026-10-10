@@ -34,8 +34,21 @@ dbt debug    # connection + config check, builds nothing
 dbt run      # compiles models, creates the views
 ```
 
-**Next:** marts layer — `dim_coins`, `dim_date`, `fact_market_snapshots`
-(star schema off stg_ models), then tests on Day 3.
+**Also done same day — MARTS + TESTS (full dbt scope complete):**
+- `models/marts/`: `dim_coins` (50 rows), `dim_date` (90 rows, built off
+  distinct dates in stg_market_chart), `fact_market_snapshots` (890 rows =
+  9 coins × 90 days + figure-heloc × 80 — the short-history quirk carried
+  through correctly).
+- Tests: schema.yml files on staging + marts (not_null, unique,
+  relationships with new `arguments:` nesting — dbt 1.12 syntax), plus 2
+  custom tests in `tests/` (no duplicate fact rows; prices positive).
+  `dbt build` = 20/20 PASS, 0 warnings.
+- Star schema proven with a real question: bitcoin avg price by day-of-week
+  via fact ⟕ dim_date (Sunday cheapest, Friday priciest).
+
+**Next session:** GitHub Actions — daily cron that runs extract_load.py +
+dbt build with secrets injected as env vars (profiles.yml already supports
+it). Then dbt docs → Netlify. Buffer banked: ~7 days.
 
 ---
 

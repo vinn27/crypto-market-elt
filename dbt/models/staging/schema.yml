@@ -1,0 +1,16 @@
+# Tests for the staging layer.
+
+version: 2
+
+models:
+  - name: stg_coins
+    columns:
+      - name: coin_id
+        data_tests: [unique, not_null]
+
+  - name: stg_market_chart
+    columns:
+      - name: coin_id
+        data_tests: [not_null]
+      - name: price_date
+        data_tests: [not_null]

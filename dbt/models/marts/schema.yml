@@ -1,0 +1,41 @@
+# Tests for the marts layer.
+# Built-in tests used here:
+#   not_null       - column must never be empty
+#   unique         - column must never repeat
+#   relationships  - value must exist in the other table (a broken link)
+# If any check finds bad rows, the dbt run fails loudly.
+
+version: 2
+
+models:
+  - name: dim_coins
+    description: "One row per coin - descriptions, no daily numbers"
+    columns:
+      - name: coin_id
+        data_tests: [unique, not_null]
+
+  - name: dim_date
+    description: "One row per day in the data, with calendar details"
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: fact_market_snapshots
+    description: "One row per coin per day - prices, volumes, market caps"
+    columns:
+      - name: coin_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_coins')
+                field: coin_id
+      - name: price_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: price
+        data_tests: [not_null]
