@@ -1,0 +1,16 @@
+# Declares the tables Python built in RAW as dbt "sources".
+# source() = "exists already, dbt didn't build it" (vs ref() = "dbt built it").
+# This is what anchors the lineage graph at the raw end.
+
+version: 2
+
+sources:
+  - name: coingecko
+    description: "Raw CoinGecko data landed by pipelines/extract_load.py"
+    database: CRYPTO_DB
+    schema: RAW
+    tables:
+      - name: coins_markets
+        description: "Top-50 market snapshot, one batch per pipeline run (append-only)"
+      - name: coin_market_chart
+        description: "Daily price/volume/market-cap history, top-10 coins, ~90 days (append-only)"

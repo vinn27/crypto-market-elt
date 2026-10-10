@@ -1,0 +1,22 @@
+# The dbt project — the only file dbt truly requires.
+# Says: who am I (name), which connection profile to use, and how each
+# models/ subfolder should be materialized and where.
+
+name: crypto_elt
+version: "1.0.0"
+profile: crypto_elt
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+flags:
+  send_anonymous_usage_stats: false
+
+models:
+  crypto_elt:
+    staging:
+      +materialized: view   # cleaning layer: no data copied, reads RAW live
+      +schema: staging
+    marts:
+      +materialized: table  # presentation layer: physically built for BI
+      +schema: marts

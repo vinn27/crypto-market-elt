@@ -1,7 +1,43 @@
-# Session Notes — 2026-10-09 (Day 1)
+# Session Notes
 
-*Working log for the crypto-market-elt build. One file per session so any
+*Working log for the crypto-market-elt build. One section per session so any
 future session (or future me) can pick up cold.*
+
+---
+
+## Day 2 — 2026-10-10 (dbt: staging layer) — DONE
+
+**Built:** `dbt/` project — `dbt_project.yml`, `profiles.yml` (env_var-based,
+secret-free, committable), `macros/generate_schema_name.sql` (pass-through
+schema naming override — avoids dbt's `STAGING_STAGING` default gotcha),
+`models/staging/sources.yml` (both RAW tables declared), and two staging
+models: `stg_coins.sql`, `stg_market_chart.sql`.
+
+**dbt anatomy learned:** a project is just dbt_project.yml + SQL files.
+`source()` = exists already (Python built it); `ref()` = dbt built it.
+Staging = views (no data copied, reads RAW live); marts = tables.
+
+**Verified:** `dbt debug` all green; `dbt run` 2/2 views created in STAGING
+schema. Dedupe proven: bitcoin 1 row (latest load's price), 50 coins total.
+
+**Quirk understood (know this for interviews):** market_chart returns 91
+points for 90 days — daily 00:00 UTC points PLUS a live "now" point sharing
+today's date. Grain "one row per coin per DATE" collapses them to 90.
+Yesterday's warning "config path models.crypto_elt.marts unused" = marts
+folder doesn't exist yet (expected).
+
+**Commands used (bash):**
+```
+cd dbt && set -a && source ../.env && set +a
+export DBT_PROFILES_DIR=.
+dbt debug    # connection + config check, builds nothing
+dbt run      # compiles models, creates the views
+```
+
+**Next:** marts layer — `dim_coins`, `dim_date`, `fact_market_snapshots`
+(star schema off stg_ models), then tests on Day 3.
+
+---
 
 ## Where we are vs plan
 

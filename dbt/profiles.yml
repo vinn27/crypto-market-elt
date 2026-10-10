@@ -1,0 +1,17 @@
+# Connection settings for dbt -> Snowflake.
+# Every credential comes from environment variables (loaded from .env),
+# so this file contains NO secrets and can be committed. The same file
+# later works in GitHub Actions by injecting the same env vars as secrets.
+
+crypto_elt:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      warehouse: COMPUTE_WH
+      database: CRYPTO_DB
+      schema: STAGING
+      threads: 4
