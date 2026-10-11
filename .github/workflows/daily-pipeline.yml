@@ -1,0 +1,48 @@
+# The daily recipe for GitHub's rented computer.
+# Runs: fetch crypto data -> load raw into Snowflake -> dbt build (clean + marts + tests)
+#
+# Triggers:
+#   schedule          every day 01:05 UTC = 6:35 AM India time
+#   workflow_dispatch the "Run workflow" button on GitHub (for manual testing)
+
+name: Daily crypto ELT
+
+on:
+  schedule:
+    - cron: "5 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    # Non-secret settings visible to every step; secrets come from GitHub's vault.
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_WAREHOUSE: COMPUTE_WH
+      SNOWFLAKE_DATABASE: CRYPTO_DB
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools (snowflake driver + dbt)
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests python-dotenv snowflake-connector-python dbt-snowflake
+
+      - name: Fetch + load raw data
+        run: python pipelines/extract_load.py
+
+      - name: dbt build (clean -> marts -> tests)
+        working-directory: dbt
+        env:
+          DBT_PROFILES_DIR: .
+        run: dbt build
