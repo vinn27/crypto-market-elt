@@ -139,6 +139,14 @@ body {
 .delta-up   { color: var(--good); }
 .delta-down { color: var(--critical); }
 
+/* ---------- filter row labels ---------- */
+
+.filter-label {
+  font-size: 11.5px; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-right: -2px;
+}
+
 /* ---------- chips (filter row) ---------- */
 
 .filter-row {

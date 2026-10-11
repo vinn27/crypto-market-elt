@@ -110,18 +110,28 @@
   <!-- ======================= PRICE HISTORY ======================= -->
   <section class="section reveal" aria-label="Price history">
     <div class="card">
-      <h2 class="card-title">Price history — 90 days</h2>
-      <p class="card-sub">Daily closes from the fact table. Indexed view rebases every coin to 100 at the window start, so shape is comparable without a second axis.</p>
+      <h2 class="card-title" id="histTitle">Price — last 90 days</h2>
+      <p class="card-sub">Daily values from the fact table. The indexed scale rebases every series to 100 at the window start, so growth is comparable without a second axis. The range also drives the weekday analysis below.</p>
 
       <div class="filter-row" id="coinChips" role="group" aria-label="Coins shown"></div>
 
       <div class="filter-row">
-        <button class="chip" data-range="7">7D</button>
-        <button class="chip" data-range="30">30D</button>
-        <button class="chip" data-range="90" aria-pressed="true">90D</button>
-        <div class="seg" role="group" aria-label="Value scale">
-          <button id="modeUsd" aria-pressed="true">USD</button>
-          <button id="modeIdx">Indexed to 100</button>
+        <span class="filter-label">Range</span>
+        <div class="seg" id="rangeSeg" role="group" aria-label="Time range">
+          <button data-range="7">7D</button>
+          <button data-range="30">30D</button>
+          <button data-range="90" aria-pressed="true">90D</button>
+        </div>
+        <span class="filter-label">Measure</span>
+        <div class="seg" id="metricSeg" role="group" aria-label="Measure">
+          <button data-metric="price" aria-pressed="true">Price</button>
+          <button data-metric="mcap">Market cap</button>
+          <button data-metric="volume">Volume</button>
+        </div>
+        <span class="filter-label">Scale</span>
+        <div class="seg" id="scaleSeg" role="group" aria-label="Value scale">
+          <button data-mode="usd" aria-pressed="true">USD</button>
+          <button data-mode="idx">Indexed to 100</button>
         </div>
       </div>
 
@@ -139,10 +149,15 @@
     </div>
 
     <div class="card">
-      <h2 class="card-title">Does the day matter?</h2>
-      <p class="card-sub">Bitcoin's average day-over-day move by weekday (90-day window).</p>
-      <div id="weekdayChart" class="chart" role="img" aria-label="Column chart of bitcoin average daily change by weekday"></div>
-      <p class="chart-note">A fact ⟕ dim_date query — the kind the star schema exists for. Pattern-spotting, not trading advice.</p>
+      <h2 class="card-title">The weekday effect</h2>
+      <p class="card-sub">Average day-over-day move by weekday. Every bar is a fact-table row joined to <code style="font-size:0.9em">dim_date</code> — the calendar dimension is what makes "Saturday" visible to SQL.</p>
+      <div class="filter-row">
+        <span class="filter-label">Coin</span>
+        <select id="weekdayCoin" class="table-search" style="width:auto" aria-label="Coin for weekday analysis"></select>
+      </div>
+      <div id="weekdayChart" class="chart" role="img" aria-label="Column chart of average daily change by weekday for the selected coin"></div>
+      <p class="chart-note" id="weekdayInsight" style="color:var(--ink-2)"></p>
+      <p class="chart-note">Curiosity, not a trading signal — each bar averages the daily moves inside the selected range.</p>
     </div>
   </section>
 
@@ -269,9 +284,15 @@ function setDelta(el, v) {
 
 /* ---------- state ---------- */
 
-let OVERVIEW, HISTORY, TOP, WEEKDAY;
-const state = { selected: new Set(), range: 90, mode: "usd" };
+let OVERVIEW, HISTORY, TOP;
+const state = { selected: new Set(), range: 90, mode: "usd", metric: "price" };
 const charts = {};
+
+const METRICS = {
+  price:  { label: "Price",      key: "prices",  fmt: fmtPrice },
+  mcap:   { label: "Market cap", key: "mcaps",   fmt: fmtCompact },
+  volume: { label: "Volume",     key: "volumes", fmt: fmtCompact },
+};
 
 /* ---------- boot ---------- */
 
@@ -279,12 +300,12 @@ Promise.all([
   fetch("data/overview.json").then(r => r.json()),
   fetch("data/history.json").then(r => r.json()),
   fetch("data/top_coins.json").then(r => r.json()),
-  fetch("data/weekday.json").then(r => r.json()),
-]).then(([ov, hi, tc, wd]) => {
-  OVERVIEW = ov; HISTORY = hi; TOP = tc; WEEKDAY = wd;
+]).then(([ov, hi, tc]) => {
+  OVERVIEW = ov; HISTORY = hi; TOP = tc;
   renderHeader();
   renderKpis();
   buildChips();
+  wireControls();
   buildPriceChart();
   buildMcapChart();
   buildWeekdayChart();
@@ -377,21 +398,58 @@ function buildChips() {
   });
 }
 
+function wireControls() {
+  document.querySelectorAll("#rangeSeg button").forEach(b => {
+    b.addEventListener("click", () => {
+      state.range = +b.dataset.range;
+      document.querySelectorAll("#rangeSeg button").forEach(x =>
+        x.setAttribute("aria-pressed", String(x === b)));
+      updatePriceChart();
+      renderWeekday();          // the range scopes the weekday analysis too
+    });
+  });
+  document.querySelectorAll("#metricSeg button").forEach(b => {
+    b.addEventListener("click", () => {
+      state.metric = b.dataset.metric;
+      document.querySelectorAll("#metricSeg button").forEach(x =>
+        x.setAttribute("aria-pressed", String(x === b)));
+      updatePriceChart();
+    });
+  });
+  document.querySelectorAll("#scaleSeg button").forEach(b => {
+    b.addEventListener("click", () => {
+      state.mode = b.dataset.mode;
+      document.querySelectorAll("#scaleSeg button").forEach(x =>
+        x.setAttribute("aria-pressed", String(x === b)));
+      updatePriceChart();
+    });
+  });
+  const sel = document.getElementById("weekdayCoin");
+  HISTORY.coins.forEach(c => {
+    const o = document.createElement("option");
+    o.value = c.id;
+    o.textContent = c.name + " · " + c.symbol.toUpperCase();
+    sel.append(o);
+  });
+  sel.value = "bitcoin";
+  sel.addEventListener("change", renderWeekday);
+}
+
 function priceChartData() {
   const window_ = state.range;
+  const m = METRICS[state.metric];
   return HISTORY.coins
     .filter(c => state.selected.has(c.id))
     .map(c => {
       const dates = c.dates.slice(-window_);
-      const prices = c.prices.slice(-window_);
-      const volumes = c.volumes.slice(-window_);
-      const base = state.mode === "idx" ? prices[0] : null;
+      const raw = c[m.key].slice(-window_);
+      const base = state.mode === "idx" ? raw[0] : null;
       return {
         name: c.symbol.toUpperCase(),
         color: SLOTS[c.slot],
         dates,
-        values: base ? prices.map(p => +(100 * p / base).toFixed(2)) : prices,
-        volumes,
+        values: base ? raw.map(v => +(100 * v / base).toFixed(2)) : raw,
+        volumes: c.volumes.slice(-window_),
       };
     });
 }
@@ -426,9 +484,11 @@ function updatePriceChart() {
       splitLine: { lineStyle: { color: INK.grid, width: 1, type: "solid" } },
       axisLabel: {
         color: INK.muted, fontSize: 11, fontFamily: "system-ui",
-        formatter: v => state.mode === "usd"
-          ? (v >= 1000 ? "$" + Math.round(v / 1000) + "K" : "$" + v)
-          : String(v),
+        formatter: v => state.mode === "idx"
+          ? String(Math.round(v))
+          : (state.metric === "price"
+              ? (v >= 1000 ? "$" + Math.round(v / 1000) + "K" : "$" + v)
+              : fmtCompact(v)),
       },
     },
     tooltip: {
@@ -444,10 +504,11 @@ function updatePriceChart() {
             p.color + '"></span>' +
             '<span style="color:' + INK.muted + '">' + esc(p.seriesName) + "</span>" +
             '<span style="margin-left:auto;font-weight:600;color:' + INK.primary + '">' +
-            (state.mode === "usd" ? fmtPrice(p.value) : p.value.toFixed(1)) + "</span>" +
+            (state.mode === "idx" ? p.value.toFixed(1) : METRICS[state.metric].fmt(p.value)) + "</span>" +
             "</div>" +
+            (state.metric === "volume" ? "" :
             '<div style="margin:-2px 0 0 18px;font-size:11px;color:' + INK.muted +
-            '">vol ' + fmtCompact(vol) + "</div>";
+            '">vol ' + fmtCompact(vol) + "</div>");
         }).join("");
         return '<div style="font-weight:600;color:' + INK.primary + '">' +
           esc(params[0].axisValueLabel) + "</div>" + rows;
@@ -463,14 +524,21 @@ function updatePriceChart() {
       endLabel: {
         show: data.length <= 4, distance: 8,
         color: INK.secondary, fontSize: 11,
-        formatter: () => (state.mode === "usd" ? fmtPrice(d.values.at(-1)) : d.values.at(-1).toFixed(0)),
+        formatter: () => (state.mode === "idx"
+          ? d.values.at(-1).toFixed(0)
+          : METRICS[state.metric].fmt(d.values.at(-1))),
       },
     })),
   }, { notMerge: true });
 
+  document.getElementById("histTitle").textContent =
+    METRICS[state.metric].label +
+    (state.mode === "idx" ? " — indexed to 100" : "") +
+    " · last " + state.range + " days";
+
   const note = document.getElementById("priceNote");
   note.textContent = state.mode === "idx"
-    ? "Indexed to 100 at the start of the selected window — compare shape, not price level."
+    ? "Every series rebased to 100 at the window start — compare growth, not level."
     : (single
       ? "Single series — the area wash carries the hue; the chip row is the selector."
       : "Up to 4 coins; each keeps its own fixed color whatever the selection.");
@@ -523,13 +591,45 @@ function buildMcapChart() {
   });
 }
 
-/* ---------- weekday pattern ---------- */
+/* ---------- weekday pattern (computed from the fact series) ---------- */
+
+function weekdayStats(coinId, range) {
+  const c = HISTORY.coins.find(x => x.id === coinId);
+  const dates = c.dates.slice(-range);
+  const prices = c.prices.slice(-range);
+  const acc = Array.from({ length: 7 }, () => ({ sum: 0, abs: 0, priceSum: 0, n: 0 }));
+  for (let i = 1; i < dates.length; i++) {
+    const prev = prices[i - 1];
+    if (!prev) continue;
+    const chg = 100 * (prices[i] - prev) / prev;
+    const wd = new Date(dates[i] + "T00:00:00Z").getUTCDay();
+    acc[wd].sum += chg;
+    acc[wd].abs += Math.abs(chg);
+    acc[wd].priceSum += prices[i];
+    acc[wd].n++;
+  }
+  return acc.map((a, i) => ({
+    day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
+    avg: a.n ? a.sum / a.n : null,
+    volatility: a.n ? a.abs / a.n : null,
+    avgPrice: a.n ? a.priceSum / a.n : null,
+    n: a.n,
+  }));
+}
 
 function buildWeekdayChart() {
-  const days = WEEKDAY.days;
   charts.weekday = echarts.init(document.getElementById("weekdayChart"));
+  renderWeekday();
+}
+
+function renderWeekday() {
+  const sel = document.getElementById("weekdayCoin");
+  const coinId = sel.value || "bitcoin";
+  const coin = HISTORY.coins.find(c => c.id === coinId);
+  const days = weekdayStats(coinId, state.range);
+
   charts.weekday.setOption({
-    animation: !REDUCED, animationDuration: 700, animationEasing: "cubicOut",
+    animation: !REDUCED, animationDuration: 650, animationEasing: "cubicOut",
     grid: { left: 8, right: 8, top: 26, bottom: 4, containLabel: true },
     xAxis: {
       type: "category", data: days.map(d => d.day),
@@ -549,19 +649,20 @@ function buildWeekdayChart() {
       formatter: p => {
         const d = days[p.dataIndex];
         return "<div><b style=\"color:" + INK.primary + "\">" + d.day + "</b> (n=" +
-          d.days_counted + ")</div>" +
+          d.n + " days)</div>" +
           '<div style="margin-top:4px">avg move <b style="color:' +
-          (d.avg_change_pct >= 0 ? INK.good : INK.critical) + '">' +
-          (d.avg_change_pct >= 0 ? "+" : "") + d.avg_change_pct.toFixed(2) + "%</b></div>" +
-          "<div>avg price " + fmtPrice(d.avg_price) + "</div>";
+          (d.avg >= 0 ? INK.good : INK.critical) + '">' +
+          (d.avg >= 0 ? "+" : "") + d.avg.toFixed(2) + "%</b></div>" +
+          "<div>avg swing ±" + d.volatility.toFixed(2) + "%</div>" +
+          "<div>avg price " + fmtPrice(d.avgPrice) + "</div>";
       },
     },
     series: [{
       type: "bar",
       data: days.map(d => ({
-        value: d.avg_change_pct,
+        value: d.avg,
         itemStyle: {
-          color: d.avg_change_pct >= 0 ? INK.good : INK.critical,
+          color: d.avg >= 0 ? INK.good : INK.critical,
           borderRadius: [4, 4, 0, 0],
         },
       })),
@@ -572,7 +673,18 @@ function buildWeekdayChart() {
         formatter: p => (p.value >= 0 ? "+" : "") + p.value.toFixed(2) + "%",
       },
     }],
-  });
+  }, { notMerge: true });
+
+  const valid = days.filter(d => d.avg != null);
+  if (valid.length) {
+    const best = valid.reduce((a, b) => (b.avg > a.avg ? b : a));
+    const calm = valid.reduce((a, b) => (Math.abs(b.avg) < Math.abs(a.avg) ? b : a));
+    const ins = document.getElementById("weekdayInsight");
+    ins.textContent =
+      "Strongest average day: " + best.day + " (" + fmtPct(best.avg).replace(" ", "") +
+      ") · calmest: " + calm.day + " (" + fmtPct(calm.avg).replace(" ", "") +
+      ") · " + coin.name + " over the last " + state.range + " days";
+  }
 }
 
 /* ---------- table ---------- */

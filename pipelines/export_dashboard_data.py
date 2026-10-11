@@ -101,16 +101,17 @@ def main():
     meta = cur.fetchall()  # fixed order = fixed color slots; color follows entity
 
     cur.execute("""
-        SELECT f.coin_id, f.price_date, f.price, f.total_volume
+        SELECT f.coin_id, f.price_date, f.price, f.total_volume, f.market_cap
         FROM MARTS.FACT_MARKET_SNAPSHOTS f
         ORDER BY f.price_date
     """)
-    by_coin = {m[0]: {"dates": [], "prices": [], "volumes": []} for m in meta}
-    for coin_id, d, p, v in cur.fetchall():
+    by_coin = {m[0]: {"dates": [], "prices": [], "volumes": [], "mcaps": []} for m in meta}
+    for coin_id, d, p, v, mc in cur.fetchall():
         if coin_id in by_coin:
             by_coin[coin_id]["dates"].append(d.isoformat())
             by_coin[coin_id]["prices"].append(p)
             by_coin[coin_id]["volumes"].append(v)
+            by_coin[coin_id]["mcaps"].append(mc)
 
     history = {
         "coins": [
@@ -122,6 +123,7 @@ def main():
                 "dates": by_coin[m[0]]["dates"],
                 "prices": by_coin[m[0]]["prices"],
                 "volumes": by_coin[m[0]]["volumes"],
+                "mcaps": by_coin[m[0]]["mcaps"],
             }
             for i, m in enumerate(meta)
         ]
