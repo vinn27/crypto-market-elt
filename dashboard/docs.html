@@ -89,6 +89,16 @@
   .star .tablecard ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
   .star .tablecard li { margin: 2px 0; }
 
+  .pipe-stats {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin: 18px 0;
+  }
+  .pipe-stat { border-top: 2px solid var(--grid); padding-top: 8px; }
+  .pipe-stat .k { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.4px; }
+  .pipe-stat .v { font-size: 15.5px; color: var(--ink-1); font-weight: 600; margin-top: 2px; }
+  .pipe-stat .v.ok { color: var(--good); }
+
   table.spec { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 14px; }
   table.spec th {
     text-align: left; color: var(--ink-3); font-size: 11.5px; text-transform: uppercase;
@@ -267,17 +277,28 @@
 
   <!-- ======================= 6 ======================= -->
   <section class="doc-section" id="fresh">
-    <h2><span class="num">06</span> How this page stays fresh</h2>
-    <p>Every morning at 06:35 IST, GitHub Actions rents a small computer and runs
-       the whole pipeline. The last step exports the marts to four small JSON
-       files and commits them to the repository — which triggers this site's
-       rebuild on Netlify's CDN.</p>
+    <h2><span class="num">06</span> The pipeline behind this page</h2>
+    <p>Nobody presses a button — every morning at 06:35 IST, GitHub Actions
+       rents a small computer and runs the whole pipeline end to end: fetch,
+       load, transform, test, export, publish. Fresh JSON is committed to the
+       repository as a visible data trail, and the site is deployed straight
+       to Netlify's CDN.</p>
+
+    <div class="pipe-stats">
+      <div class="pipe-stat"><div class="k">Schedule</div><div class="v">06:35 IST daily</div></div>
+      <div class="pipe-stat"><div class="k">Fact rows</div><div class="v" id="pipeFact">—</div></div>
+      <div class="pipe-stat"><div class="k">Calendar days</div><div class="v" id="pipeDates">—</div></div>
+      <div class="pipe-stat"><div class="k">Quality checks</div><div class="v ok">15 / 15 passing</div></div>
+      <div class="pipe-stat"><div class="k">Orchestrator</div><div class="v">GitHub Actions</div></div>
+      <div class="pipe-stat"><div class="k">Last data</div><div class="v" id="pipeAsOf">—</div></div>
+    </div>
+
     <div class="callout">
       <b>Visitors never touch Snowflake.</b> The dashboard is a static page
       reading static JSON — no database connection, no credentials in the
       browser, no per-visit compute cost. The only machine that ever pays for
-      queries is the nightly runner, and the warehouse itself sleeps (auto-suspend)
-      whenever it isn't being queried.
+      queries is the nightly runner, and the warehouse itself sleeps
+      (auto-suspend after 60 idle seconds) whenever it isn't being queried.
     </div>
   </section>
 
@@ -316,6 +337,22 @@
   <span>CryptoELT — an autonomous ELT portfolio project</span>
   <span style="margin-left:auto"><a href="index.html">← Back to dashboard</a></span>
 </footer>
+
+<script>
+/* Live pipeline numbers for section 06, from the same JSON the dashboard reads. */
+fetch("data/overview.json").then(r => r.json()).then(ov => {
+  document.getElementById("pipeFact").textContent =
+    ov.fact_rows.toLocaleString("en-US");
+  document.getElementById("pipeDates").textContent =
+    ov.dim_dates.toLocaleString("en-US") + " days";
+  const d = new Date(ov.as_of_utc);
+  document.getElementById("pipeAsOf").textContent =
+    d.getUTCDate() + " " +
+    d.toLocaleString("en-US", { month: "short", timeZone: "UTC" }) + " · " +
+    String(d.getUTCHours()).padStart(2, "0") + ":" +
+    String(d.getUTCMinutes()).padStart(2, "0") + " UTC";
+}).catch(() => {});
+</script>
 
 </body>
 </html>

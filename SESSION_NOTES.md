@@ -40,9 +40,22 @@ triggers Netlify's rebuild each night.
 **Local verification:** all files 200 via throwaway http.server; JSON shapes
 checked (8 coins, slots 0-7, 92 aligned points, 20 rows, 7 weekdays).
 
-**PENDING:** Netlify Git integration (user, UI): Import from Git → repo →
-publish directory `dashboard`, no build command. Then README final polish +
-interview story + optional dbt-docs page.
+**Dashboard v2 (same day, user feedback round):** site deployed via local
+Netlify CLI (crypto-market-elt.netlify.app, site id
+d82d6d26-0dd7-4954-86c7-6264ae938f06) — no new account needed (same one as
+WikiPulse). Upgrades: "weekday effect" card now computes client-side from
+history.json (coin dropdown for all 8 coins + inherits global range +
+dynamic insight line + volatility in tooltip); **Measure filter added**
+(Price / Market cap / Volume — export now includes `mcaps` arrays);
+**bug fixed: 7D/30D range and USD/Indexed toggle were never wired to
+anything in v1** — now functional via `wireControls()`; filter rows carry
+labels (Range / Measure / Scale / Coin). weekday.json still exported (SQL
+demo artifact) but no longer fetched by the page. Workflow has a Netlify
+deploy step (needs NETLIFY_AUTH_TOKEN secret from user to go autonomous).
+
+**PENDING:** NETLIFY_AUTH_TOKEN from user (app.netlify.com/user/applications)
+→ `gh secret set` → trigger workflow to verify the full auto chain. Then
+README final polish + interview story + optional dbt-docs page.
 
 ---
 

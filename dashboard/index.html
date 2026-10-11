@@ -18,38 +18,6 @@
   /* ---- sparkline ---- */
   .spark { display: block; margin-top: 8px; }
 
-  /* ---- pipeline panel ---- */
-  .flow { display: flex; align-items: stretch; gap: 0; margin: 14px 0 18px; overflow-x: auto; padding: 4px 0; }
-  .flow-node {
-    flex: 1 1 0; min-width: 108px;
-    border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 12px; background: var(--page);
-  }
-  .flow-node b { display: block; font-size: 13px; color: var(--ink-1); }
-  .flow-node span { font-size: 11px; color: var(--ink-3); }
-  .flow-link {
-    flex: 0 0 34px; align-self: center; height: 2px; position: relative;
-    background: var(--baseline); min-width: 26px;
-  }
-  .flow-link::after {
-    content: ""; position: absolute; inset: 0;
-    background: linear-gradient(90deg, transparent 0%, var(--series-1) 50%, transparent 100%);
-    background-size: 200% 100%;
-    animation: stream 2.4s linear infinite;
-    opacity: 0.9;
-  }
-  @keyframes stream { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-  @media (prefers-reduced-motion: reduce) { .flow-link::after { animation: none; opacity: 0.35; } }
-
-  .pipe-stats {
-    display: grid; gap: 10px;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  }
-  .pipe-stat { border-top: 2px solid var(--grid); padding-top: 8px; }
-  .pipe-stat .k { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.4px; }
-  .pipe-stat .v { font-size: 15.5px; color: var(--ink-1); font-weight: 600; margin-top: 2px; }
-  .pipe-stat .v.ok { color: var(--good); }
-
   .error-state { color: var(--ink-3); padding: 60px 0; text-align: center; }
 </style>
 </head>
@@ -187,33 +155,7 @@
     </div>
   </section>
 
-  <!-- ======================= PIPELINE ======================= -->
-  <section class="section reveal" aria-label="Pipeline health">
-    <div class="card">
-      <h2 class="card-title">The pipeline behind this page</h2>
-      <p class="card-sub">Nobody pressed a button today — this data arrived on schedule and rebuilt itself.</p>
-
-      <div class="flow" aria-hidden="true">
-        <div class="flow-node"><b>CoinGecko</b><span>free public API</span></div>
-        <div class="flow-link"></div>
-        <div class="flow-node"><b>RAW</b><span>land as-is · append-only</span></div>
-        <div class="flow-link"></div>
-        <div class="flow-node"><b>STAGING</b><span>dbt · clean + dedupe</span></div>
-        <div class="flow-link"></div>
-        <div class="flow-node"><b>MARTS</b><span>star schema · 15 tests</span></div>
-        <div class="flow-link"></div>
-        <div class="flow-node"><b>This page</b><span>JSON → Netlify CDN</span></div>
-      </div>
-
-      <div class="pipe-stats">
-        <div class="pipe-stat"><div class="k">Schedule</div><div class="v">06:35 IST daily</div></div>
-        <div class="pipe-stat"><div class="k">Fact rows</div><div class="v" id="pipeFact">—</div></div>
-        <div class="pipe-stat"><div class="k">Calendar days</div><div class="v" id="pipeDates">—</div></div>
-        <div class="pipe-stat"><div class="k">Quality checks</div><div class="v ok">15 / 15 passing</div></div>
-        <div class="pipe-stat"><div class="k">Runs on</div><div class="v">GitHub Actions</div></div>
-      </div>
-    </div>
-  </section>
+  <!-- ======================= PIPELINE: moved to docs.html ======================= -->
 
 </main>
 
@@ -310,7 +252,6 @@ Promise.all([
   buildMcapChart();
   buildWeekdayChart();
   buildTable();
-  renderPipeStats();
   observeReveals();
   window.addEventListener("resize", () =>
     Object.values(charts).forEach(c => c.resize()));
@@ -759,14 +700,7 @@ function renderTable() {
   }
 }
 
-/* ---------- pipeline stats + reveal ---------- */
-
-function renderPipeStats() {
-  document.getElementById("pipeFact").textContent =
-    OVERVIEW.fact_rows.toLocaleString("en-US");
-  document.getElementById("pipeDates").textContent =
-    OVERVIEW.dim_dates.toLocaleString("en-US") + " days";
-}
+/* ---------- reveal ---------- */
 
 function observeReveals() {
   const io = new IntersectionObserver(entries => {
