@@ -28,6 +28,17 @@ with conn.cursor() as cur:
     for schema in LAYER_SCHEMAS:
         cur.execute(f"CREATE SCHEMA IF NOT EXISTS CRYPTO_DB.{schema}")
         print(f"OK  CRYPTO_DB.{schema}")
+
+    # Compute governance: an idle or runaway warehouse is how trial credits
+    # die. AUTO_SUSPEND stops billing 60s after the last query;
+    # STATEMENT_TIMEOUT kills any query that runs away.
+    cur.execute(
+        "ALTER WAREHOUSE IF EXISTS COMPUTE_WH SET "
+        "AUTO_SUSPEND = 60 "
+        "AUTO_RESUME = TRUE "
+        "STATEMENT_TIMEOUT_IN_SECONDS = 600"
+    )
+    print("OK  COMPUTE_WH: auto-suspend 60s, statement timeout 600s")
     cur.execute("SHOW SCHEMAS IN DATABASE CRYPTO_DB")
     print("\nSchemas now in CRYPTO_DB:")
     for row in cur.fetchall():

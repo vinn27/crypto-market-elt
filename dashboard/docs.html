@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentation — CryptoELT</title>
+<meta name="description" content="How the CryptoELT dashboard works: architecture, star schema, data quality, and the nightly pipeline that keeps it fresh.">
+<link rel="stylesheet" href="assets/base.css">
+<style>
+  .docs-hero { margin-top: 40px; }
+  .docs-hero h1 { font-size: 34px; letter-spacing: -0.8px; margin: 0 0 10px; }
+  .docs-hero p { color: var(--ink-2); max-width: 720px; margin: 0; font-size: 16px; }
+  .docs-hero .tick { color: var(--series-1); }
+
+  .toc {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 6px;
+  }
+  .toc a {
+    font-size: 12.5px; color: var(--ink-2); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 13px;
+    transition: all 0.15s ease;
+  }
+  .toc a:hover { color: var(--ink-1); background: rgba(255,255,255,0.05); }
+
+  .doc-section { margin-top: 40px; scroll-margin-top: 80px; }
+  .doc-section h2 {
+    font-size: 20px; letter-spacing: -0.3px; margin: 0 0 6px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .doc-section h2 .num {
+    font-size: 12px; color: var(--series-1); font-weight: 650;
+    border: 1px solid var(--border); border-radius: 7px; padding: 2px 8px;
+  }
+  .doc-section p { color: var(--ink-2); max-width: 780px; }
+  .doc-section code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.9em; color: var(--ink-1);
+    background: var(--page); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1.5px 6px;
+  }
+
+  .callout {
+    border-left: 3px solid var(--series-1);
+    background: rgba(57, 135, 229, 0.07);
+    border-radius: 0 10px 10px 0;
+    padding: 14px 18px; margin: 16px 0; max-width: 780px;
+    color: var(--ink-2); font-size: 14px;
+  }
+  .callout b { color: var(--ink-1); }
+
+  .layer-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 18px 0; }
+  .layer {
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; background: var(--page);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+  .layer:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.2); }
+  .layer h3 { margin: 0 0 6px; font-size: 15px; }
+  .layer .tag { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .layer p { margin: 6px 0 0; font-size: 13.5px; color: var(--ink-2); }
+
+  .flow { display: flex; align-items: stretch; margin: 18px 0; overflow-x: auto; padding: 4px 0; }
+  .flow-node { flex: 1 1 0; min-width: 108px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--page); }
+  .flow-node b { display: block; font-size: 13px; color: var(--ink-1); }
+  .flow-node span { font-size: 11px; color: var(--ink-3); }
+  .flow-link { flex: 0 0 34px; align-self: center; height: 2px; position: relative; background: var(--baseline); min-width: 26px; }
+  .flow-link::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, var(--series-1) 50%, transparent 100%);
+    background-size: 200% 100%; animation: stream 2.4s linear infinite; opacity: 0.9;
+  }
+  @keyframes stream { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .flow-link::after { animation: none; opacity: 0.35; } }
+
+  .star {
+    display: grid; gap: 14px; margin: 18px 0;
+    grid-template-columns: 1fr; align-items: start;
+  }
+  @media (min-width: 860px) {
+    .star { grid-template-columns: 1fr 1fr 1fr; align-items: center; }
+  }
+  .star .tablecard {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+    background: var(--page);
+  }
+  .star .tablecard.fact { border-color: rgba(57, 135, 229, 0.45); }
+  .star .tablecard h3 { margin: 0 0 4px; font-size: 14.5px; }
+  .star .tablecard .grain { font-size: 12px; color: var(--series-1); margin-bottom: 8px; }
+  .star .tablecard ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
+  .star .tablecard li { margin: 2px 0; }
+
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 14px; }
+  table.spec th {
+    text-align: left; color: var(--ink-3); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 8px 10px; border-bottom: 1px solid var(--baseline);
+  }
+  table.spec td { padding: 9px 10px; border-bottom: 1px solid var(--grid); color: var(--ink-2); }
+  table.spec td:first-child { color: var(--ink-1); font-weight: 550; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">Crypto<span class="tick">ELT</span></a>
+    <span class="brand-sub">documentation</span>
+    <nav class="nav">
+      <a href="index.html">← Dashboard</a>
+      <a class="primary" href="https://github.com/vinn27/crypto-market-elt" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="docs-hero">
+    <h1>How this dashboard works</h1>
+    <p>CryptoELT is a fully autonomous crypto-market analytics pipeline.
+       Every morning it fetches fresh data from CoinGecko, lands it raw in a
+       Snowflake warehouse, rebuilds a tested star schema with dbt, and
+       publishes this page — with no human pressing any buttons.</p>
+    <div class="toc">
+      <a href="#what">The dashboard</a>
+      <a href="#source">Data source</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#star">Star schema</a>
+      <a href="#quality">Data quality</a>
+      <a href="#fresh">Staying fresh</a>
+      <a href="#stack">Tech stack</a>
+      <a href="#reproduce">Reproduce it</a>
+    </div>
+  </section>
+
+  <!-- ======================= 1 ======================= -->
+  <section class="doc-section" id="what">
+    <h2><span class="num">01</span> What you're looking at</h2>
+    <p>The dashboard has five zones, each fed by a specific table in the warehouse:</p>
+    <table class="spec">
+      <tr><th>Zone</th><th>What it shows</th><th>Reads from</th></tr>
+      <tr><td>KPI tiles</td><td>Bitcoin &amp; Ethereum prices with 24h change, total market cap, biggest mover</td><td>staging snapshot</td></tr>
+      <tr><td>Price history</td><td>90 days of daily closes, up to 4 coins; USD view or rebased “indexed to 100” view</td><td>fact table</td></tr>
+      <tr><td>Top 10 by cap</td><td>Market-cap ranking, latest snapshot</td><td>staging snapshot</td></tr>
+      <tr><td>Weekday pattern</td><td>Bitcoin's average day-over-day move per weekday</td><td>fact ⟕ dim_date</td></tr>
+      <tr><td>Snapshot table</td><td>Top 20 coins, sortable and filterable — the table view behind the charts</td><td>staging snapshot</td></tr>
+    </table>
+    <div class="callout">
+      <b>Why “indexed to 100”?</b> Coins have wildly different price levels —
+      $82,000 vs $2.50 on one chart flattens the small one. Rebasing every series
+      to 100 at the window start compares <i>shape</i> on a single honest axis,
+      instead of the misleading shortcut of drawing two y-axes on one chart.
+    </div>
+  </section>
+
+  <!-- ======================= 2 ======================= -->
+  <section class="doc-section" id="source">
+    <h2><span class="num">02</span> Where the data comes from</h2>
+    <p>The CoinGecko public API — free, no API key. Two endpoints:</p>
+    <table class="spec">
+      <tr><th>Endpoint</th><th>Gives</th><th>Lands in</th></tr>
+      <tr><td><code>/coins/markets</code></td><td>Top-50 snapshot: prices, market cap, volume, 24h change, supply</td><td><code>RAW.COINS_MARKETS</code></td></tr>
+      <tr><td><code>/coins/{id}/market_chart</code></td><td>90 days of daily price / cap / volume for the top 10 coins</td><td><code>RAW.COIN_MARKET_CHART</code></td></tr>
+    </table>
+    <p>Raw rows are landed <b>exactly as received</b> — no renaming, no cleaning,
+       timestamps kept as strings. Every load is stamped with
+       <code>loaded_at</code>, and re-runs simply append: nothing is ever mutated
+       or deleted in RAW.</p>
+  </section>
+
+  <!-- ======================= 3 ======================= -->
+  <section class="doc-section" id="architecture">
+    <h2><span class="num">03</span> Architecture — load raw, transform in the warehouse</h2>
+
+    <div class="flow" aria-hidden="true">
+      <div class="flow-node"><b>CoinGecko</b><span>free public API</span></div>
+      <div class="flow-link"></div>
+      <div class="flow-node"><b>Python</b><span>extract + load only</span></div>
+      <div class="flow-link"></div>
+      <div class="flow-node"><b>Snowflake</b><span>RAW → STAGING → MARTS</span></div>
+      <div class="flow-link"></div>
+      <div class="flow-node"><b>dbt</b><span>SQL models + tests</span></div>
+      <div class="flow-link"></div>
+      <div class="flow-node"><b>JSON export</b><span>committed nightly</span></div>
+      <div class="flow-link"></div>
+      <div class="flow-node"><b>Netlify</b><span>this static page</span></div>
+    </div>
+
+    <div class="layer-grid">
+      <div class="layer">
+        <span class="tag">bronze</span>
+        <h3>RAW</h3>
+        <p>Data exactly as the API sent it, append-only. If any later logic is
+           wrong, the original data is still here — re-run and recover.</p>
+      </div>
+      <div class="layer">
+        <span class="tag">silver</span>
+        <h3>STAGING</h3>
+        <p>dbt views: rename to conventions, cast strings to real timestamps,
+           and keep only the latest load per row (“latest load wins”).</p>
+      </div>
+      <div class="layer">
+        <span class="tag">gold</span>
+        <h3>MARTS</h3>
+        <p>The star schema: one big fact of daily numbers plus two small
+           dimensions that describe the coins and the calendar.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <b>ELT, not ETL.</b> The classic pattern cleans data <i>before</i> loading it
+      (transform outside the database). This project loads first and transforms
+      <i>inside</i> Snowflake with SQL under version control — because modern
+      warehouses make in-warehouse SQL transforms fast, cheap, and re-runnable,
+      and raw data is never lost to a buggy transform.
+    </div>
+  </section>
+
+  <!-- ======================= 4 ======================= -->
+  <section class="doc-section" id="star">
+    <h2><span class="num">04</span> The star schema</h2>
+    <p>One big table of <b>numbers</b> (the fact), surrounded by small tables of
+       <b>descriptions</b> (the dimensions), connected by IDs — draw it and it
+       looks like a star.</p>
+
+    <div class="star">
+      <div class="tablecard">
+        <h3>dim_coins</h3>
+        <div class="grain">one row per coin</div>
+        <ul><li>symbol, name, market-cap rank</li><li>supply figures</li><li>all-time high / low + dates</li></ul>
+      </div>
+      <div class="tablecard fact">
+        <h3>fact_market_snapshots</h3>
+        <div class="grain">one row per coin per day</div>
+        <ul><li>price</li><li>market cap</li><li>24h volume</li><li>→ joins to both dims by ID</li></ul>
+      </div>
+      <div class="tablecard">
+        <h3>dim_date</h3>
+        <div class="grain">one row per day</div>
+        <ul><li>day name, weekday number</li><li>month</li><li>grows itself as new days arrive</li></ul>
+      </div>
+    </div>
+
+    <p>Why split? Same reason a school register uses roll numbers instead of
+       full names on every line: no repetition, no drift. Descriptions live once
+       in a dimension; the fact stays small and numeric. The weekday chart on
+       the dashboard is this design paying rent — a plain date can't tell you
+       it's a Saturday; <code>dim_date</code> can.</p>
+  </section>
+
+  <!-- ======================= 5 ======================= -->
+  <section class="doc-section" id="quality">
+    <h2><span class="num">05</span> Data quality — 15 checks, every night</h2>
+    <p>Every pipeline run ends with dbt tests. A test is a SELECT that hunts for
+       <i>bad rows</i> — zero rows found means pass; anything else fails the run loudly.</p>
+    <table class="spec">
+      <tr><th>Check</th><th>Protects against</th></tr>
+      <tr><td><code>not_null</code> on every key column</td><td>rows that lost their identity in loading</td></tr>
+      <tr><td><code>unique</code> on coin IDs and dates</td><td>sneaky duplicates in dimensions</td></tr>
+      <tr><td><code>relationships</code> fact → dims</td><td>facts pointing at coins/dates that don't exist</td></tr>
+      <tr><td>no duplicate fact rows</td><td>the same coin-day loaded twice</td></tr>
+      <tr><td>prices are positive</td><td>broken source data (zero / negative prices)</td></tr>
+    </table>
+    <p>The pipeline also <b>defends itself at the edges</b>: API rate-limits get
+       retry-with-backoff (honouring <code>Retry-After</code>), and one tracked
+       coin is newer than 90 days, so it simply arrives with fewer days — the
+       schema absorbs it instead of breaking.</p>
+  </section>
+
+  <!-- ======================= 6 ======================= -->
+  <section class="doc-section" id="fresh">
+    <h2><span class="num">06</span> How this page stays fresh</h2>
+    <p>Every morning at 06:35 IST, GitHub Actions rents a small computer and runs
+       the whole pipeline. The last step exports the marts to four small JSON
+       files and commits them to the repository — which triggers this site's
+       rebuild on Netlify's CDN.</p>
+    <div class="callout">
+      <b>Visitors never touch Snowflake.</b> The dashboard is a static page
+      reading static JSON — no database connection, no credentials in the
+      browser, no per-visit compute cost. The only machine that ever pays for
+      queries is the nightly runner, and the warehouse itself sleeps (auto-suspend)
+      whenever it isn't being queried.
+    </div>
+  </section>
+
+  <!-- ======================= 7 ======================= -->
+  <section class="doc-section" id="stack">
+    <h2><span class="num">07</span> Tech stack</h2>
+    <table class="spec">
+      <tr><th>Layer</th><th>Tool</th><th>Role</th></tr>
+      <tr><td>Source</td><td>CoinGecko API</td><td>free public market data, no key</td></tr>
+      <tr><td>Ingestion</td><td>Python · requests</td><td>extract + load, retry with backoff</td></tr>
+      <tr><td>Warehouse</td><td>Snowflake</td><td>storage &amp; compute separated; auto-suspending XS warehouse</td></tr>
+      <tr><td>Transformation</td><td>dbt Core</td><td>versioned SQL models, tests, docs, lineage</td></tr>
+      <tr><td>Orchestration</td><td>GitHub Actions</td><td>daily cron on free public-repo minutes</td></tr>
+      <tr><td>Presentation</td><td>Netlify + ECharts</td><td>static dashboard &amp; docs on a global CDN</td></tr>
+    </table>
+  </section>
+
+  <!-- ======================= 8 ======================= -->
+  <section class="doc-section" id="reproduce">
+    <h2><span class="num">08</span> Reproduce it</h2>
+    <p>Everything lives in <a href="https://github.com/vinn27/crypto-market-elt" style="color:var(--series-1)">vinn27/crypto-market-elt</a>.
+       With a free Snowflake trial account:</p>
+    <p>
+      <code>pip install -r requirements</code> → fill <code>.env</code> from
+      <code>.env.example</code> → <code>python pipelines/setup_snowflake.py</code> →
+      <code>python pipelines/extract_load.py</code> → <code>dbt build</code>.
+      The warehouse structure, tables, tests and this site all rebuild from the repo.
+    </p>
+    <p style="color:var(--ink-3); font-size:13px;">Market data from CoinGecko.
+       Informational only — not investment advice.</p>
+  </section>
+
+</main>
+
+<footer class="site-footer wrap">
+  <span>CryptoELT — an autonomous ELT portfolio project</span>
+  <span style="margin-left:auto"><a href="index.html">← Back to dashboard</a></span>
+</footer>
+
+</body>
+</html>

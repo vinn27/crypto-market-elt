@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CryptoELT — Market Intelligence</title>
+<meta name="description" content="Crypto market analytics from an autonomous ELT pipeline: CoinGecko → Snowflake → dbt → GitHub Actions → Netlify.">
+<link rel="stylesheet" href="assets/base.css">
+<style>
+  /* ---- page-specific: charts ---- */
+  .chart { width: 100%; }
+  #priceChart { height: 380px; }
+  #mcapChart  { height: 330px; }
+  #weekdayChart { height: 300px; }
+
+  .chart-note { font-size: 12px; color: var(--ink-3); margin: 10px 2px 0; }
+
+  /* ---- sparkline ---- */
+  .spark { display: block; margin-top: 8px; }
+
+  /* ---- pipeline panel ---- */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 14px 0 18px; overflow-x: auto; padding: 4px 0; }
+  .flow-node {
+    flex: 1 1 0; min-width: 108px;
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; background: var(--page);
+  }
+  .flow-node b { display: block; font-size: 13px; color: var(--ink-1); }
+  .flow-node span { font-size: 11px; color: var(--ink-3); }
+  .flow-link {
+    flex: 0 0 34px; align-self: center; height: 2px; position: relative;
+    background: var(--baseline); min-width: 26px;
+  }
+  .flow-link::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, var(--series-1) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: stream 2.4s linear infinite;
+    opacity: 0.9;
+  }
+  @keyframes stream { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .flow-link::after { animation: none; opacity: 0.35; } }
+
+  .pipe-stats {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  .pipe-stat { border-top: 2px solid var(--grid); padding-top: 8px; }
+  .pipe-stat .k { font-size: 11.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.4px; }
+  .pipe-stat .v { font-size: 15.5px; color: var(--ink-1); font-weight: 600; margin-top: 2px; }
+  .pipe-stat .v.ok { color: var(--good); }
+
+  .error-state { color: var(--ink-3); padding: 60px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">Crypto<span class="tick">ELT</span></a>
+    <span class="brand-sub">market intelligence, delivered nightly by an autonomous pipeline</span>
+    <nav class="nav">
+      <span class="live-badge"><span class="live-dot"></span><span id="asOf">loading…</span></span>
+      <a href="docs.html">Docs</a>
+      <a class="primary" href="https://github.com/vinn27/crypto-market-elt" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ======================= KPI ROW ======================= -->
+  <section class="section reveal" aria-label="Key figures">
+    <div class="kpi-row">
+
+      <div class="card">
+        <div class="tile-label">Bitcoin <span class="unit">BTC</span></div>
+        <div class="tile-value" id="kpiBtc">$—</div>
+        <div class="tile-delta"><span id="kpiBtcDelta">—</span><span class="vs">24h</span></div>
+        <svg class="spark" id="btcSpark" width="150" height="30" aria-hidden="true"></svg>
+      </div>
+
+      <div class="card">
+        <div class="tile-label">Ethereum <span class="unit">ETH</span></div>
+        <div class="tile-value" id="kpiEth">$—</div>
+        <div class="tile-delta"><span id="kpiEthDelta">—</span><span class="vs">24h</span></div>
+      </div>
+
+      <div class="card">
+        <div class="tile-label">Total market cap <span class="unit">top 50</span></div>
+        <div class="tile-value" id="kpiMcap">$—</div>
+        <div class="tile-delta"><span class="vs">sum of tracked coins</span></div>
+      </div>
+
+      <div class="card">
+        <div class="tile-label">Coins tracked</div>
+        <div class="tile-value" id="kpiCoins">—</div>
+        <div class="tile-delta"><span class="vs">10 with full 90-day history</span></div>
+      </div>
+
+      <div class="card">
+        <div class="tile-label">Biggest 24h mover</div>
+        <div class="tile-value" id="kpiMover">—</div>
+        <div class="tile-delta"><span id="kpiMoverDelta">—</span><span class="vs">24h</span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ======================= PRICE HISTORY ======================= -->
+  <section class="section reveal" aria-label="Price history">
+    <div class="card">
+      <h2 class="card-title">Price history — 90 days</h2>
+      <p class="card-sub">Daily closes from the fact table. Indexed view rebases every coin to 100 at the window start, so shape is comparable without a second axis.</p>
+
+      <div class="filter-row" id="coinChips" role="group" aria-label="Coins shown"></div>
+
+      <div class="filter-row">
+        <button class="chip" data-range="7">7D</button>
+        <button class="chip" data-range="30">30D</button>
+        <button class="chip" data-range="90" aria-pressed="true">90D</button>
+        <div class="seg" role="group" aria-label="Value scale">
+          <button id="modeUsd" aria-pressed="true">USD</button>
+          <button id="modeIdx">Indexed to 100</button>
+        </div>
+      </div>
+
+      <div id="priceChart" class="chart" role="img" aria-label="Line chart of daily prices for selected coins"></div>
+      <p class="chart-note" id="priceNote"></p>
+    </div>
+  </section>
+
+  <!-- ======================= RANKING + WEEKDAY ======================= -->
+  <section class="section grid-2 reveal" aria-label="Rankings and weekday patterns">
+    <div class="card">
+      <h2 class="card-title">Top 10 by market cap</h2>
+      <p class="card-sub">Latest snapshot, straight from the staging view.</p>
+      <div id="mcapChart" class="chart" role="img" aria-label="Horizontal bar chart of top 10 coins by market cap"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Does the day matter?</h2>
+      <p class="card-sub">Bitcoin's average day-over-day move by weekday (90-day window).</p>
+      <div id="weekdayChart" class="chart" role="img" aria-label="Column chart of bitcoin average daily change by weekday"></div>
+      <p class="chart-note">A fact ⟕ dim_date query — the kind the star schema exists for. Pattern-spotting, not trading advice.</p>
+    </div>
+  </section>
+
+  <!-- ======================= TABLE ======================= -->
+  <section class="section reveal" aria-label="Market snapshot table">
+    <div class="card">
+      <h2 class="card-title">Market snapshot — top 20</h2>
+      <p class="card-sub">The table view every chart on this page leans on. Click a header to sort.</p>
+      <div class="table-tools">
+        <input class="table-search" id="coinSearch" type="search" placeholder="Filter by name or symbol…" aria-label="Filter coins">
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="tbl" id="coinTable">
+          <thead>
+            <tr>
+              <th data-key="rank">#</th>
+              <th data-key="name" class="name">Coin</th>
+              <th data-key="price">Price</th>
+              <th data-key="change_24h">24h</th>
+              <th data-key="market_cap">Market cap</th>
+              <th data-key="volume">24h volume</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= PIPELINE ======================= -->
+  <section class="section reveal" aria-label="Pipeline health">
+    <div class="card">
+      <h2 class="card-title">The pipeline behind this page</h2>
+      <p class="card-sub">Nobody pressed a button today — this data arrived on schedule and rebuilt itself.</p>
+
+      <div class="flow" aria-hidden="true">
+        <div class="flow-node"><b>CoinGecko</b><span>free public API</span></div>
+        <div class="flow-link"></div>
+        <div class="flow-node"><b>RAW</b><span>land as-is · append-only</span></div>
+        <div class="flow-link"></div>
+        <div class="flow-node"><b>STAGING</b><span>dbt · clean + dedupe</span></div>
+        <div class="flow-link"></div>
+        <div class="flow-node"><b>MARTS</b><span>star schema · 15 tests</span></div>
+        <div class="flow-link"></div>
+        <div class="flow-node"><b>This page</b><span>JSON → Netlify CDN</span></div>
+      </div>
+
+      <div class="pipe-stats">
+        <div class="pipe-stat"><div class="k">Schedule</div><div class="v">06:35 IST daily</div></div>
+        <div class="pipe-stat"><div class="k">Fact rows</div><div class="v" id="pipeFact">—</div></div>
+        <div class="pipe-stat"><div class="k">Calendar days</div><div class="v" id="pipeDates">—</div></div>
+        <div class="pipe-stat"><div class="k">Quality checks</div><div class="v ok">15 / 15 passing</div></div>
+        <div class="pipe-stat"><div class="k">Runs on</div><div class="v">GitHub Actions</div></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer wrap">
+  <span>Data: CoinGecko · pipeline: <a href="https://github.com/vinn27/crypto-market-elt" target="_blank" rel="noopener">vinn27/crypto-market-elt</a></span>
+  <span>Snowflake · dbt · GitHub Actions · Netlify</span>
+  <span style="margin-left:auto">Informational only — not investment advice.</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+/* ================================================================
+   CryptoELT dashboard — all data from ./data/*.json (static export).
+   Dynamic strings are inserted with textContent / escaped helpers;
+   series colors are fixed per coin (color follows the entity).
+   ================================================================ */
+
+const SLOTS = ["#3987e5","#199e70","#c98500","#008300","#9085e9","#e66767","#d55181","#d95926"];
+const INK = { primary:"#ffffff", secondary:"#c3c2b7", muted:"#898781",
+              grid:"#2c2c2a", baseline:"#383835", surface:"#1a1a19",
+              good:"#0ca30c", critical:"#d03b3b" };
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- formatting helpers ---------- */
+
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function fmtCompact(n) {
+  if (n == null || isNaN(n)) return "—";
+  const a = Math.abs(n);
+  if (a >= 1e12) return "$" + (n / 1e12).toFixed(2) + "T";
+  if (a >= 1e9)  return "$" + (n / 1e9).toFixed(1) + "B";
+  if (a >= 1e6)  return "$" + (n / 1e6).toFixed(1) + "M";
+  if (a >= 1e3)  return "$" + (n / 1e3).toFixed(1) + "K";
+  return "$" + n.toFixed(0);
+}
+
+function fmtPrice(n) {
+  if (n == null || isNaN(n)) return "—";
+  if (n >= 1000) return "$" + Math.round(n).toLocaleString("en-US");
+  if (n >= 1)    return "$" + n.toFixed(2);
+  return "$" + n.toFixed(4);
+}
+
+function fmtPct(n) {
+  if (n == null || isNaN(n)) return "—";
+  return (n >= 0 ? "▲ " : "▼ ") + Math.abs(n).toFixed(2) + "%";
+}
+
+function pctClass(n) { return n >= 0 ? "delta-up" : "delta-down"; }
+
+function countUp(el, target, fmt, ms = 900) {
+  if (REDUCED || target == null || isNaN(target)) { el.textContent = fmt(target); return; }
+  const t0 = performance.now();
+  (function tick(t) {
+    const p = Math.min((t - t0) / ms, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(target * eased);
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
+function setDelta(el, v) {
+  el.textContent = fmtPct(v);
+  el.className = pctClass(v);
+}
+
+/* ---------- state ---------- */
+
+let OVERVIEW, HISTORY, TOP, WEEKDAY;
+const state = { selected: new Set(), range: 90, mode: "usd" };
+const charts = {};
+
+/* ---------- boot ---------- */
+
+Promise.all([
+  fetch("data/overview.json").then(r => r.json()),
+  fetch("data/history.json").then(r => r.json()),
+  fetch("data/top_coins.json").then(r => r.json()),
+  fetch("data/weekday.json").then(r => r.json()),
+]).then(([ov, hi, tc, wd]) => {
+  OVERVIEW = ov; HISTORY = hi; TOP = tc; WEEKDAY = wd;
+  renderHeader();
+  renderKpis();
+  buildChips();
+  buildPriceChart();
+  buildMcapChart();
+  buildWeekdayChart();
+  buildTable();
+  renderPipeStats();
+  observeReveals();
+  window.addEventListener("resize", () =>
+    Object.values(charts).forEach(c => c.resize()));
+}).catch(() => {
+  document.querySelector("main.wrap").innerHTML =
+    '<div class="error-state">Could not load dashboard data. ' +
+    "The nightly pipeline publishes fresh JSON — try again shortly.</div>";
+});
+
+/* ---------- header + KPIs ---------- */
+
+function renderHeader() {
+  const when = new Date(OVERVIEW.as_of_utc);
+  const label = "data as of " + when.getUTCDate() + " " +
+    when.toLocaleString("en-US", { month: "short", timeZone: "UTC" }) +
+    ", " + String(when.getUTCHours()).padStart(2, "0") + ":" +
+    String(when.getUTCMinutes()).padStart(2, "0") + " UTC";
+  document.getElementById("asOf").textContent = label;
+}
+
+function renderKpis() {
+  countUp(document.getElementById("kpiBtc"), OVERVIEW.bitcoin.price, fmtPrice);
+  setDelta(document.getElementById("kpiBtcDelta"), OVERVIEW.bitcoin.change_24h);
+  countUp(document.getElementById("kpiEth"), OVERVIEW.ethereum.price, fmtPrice);
+  setDelta(document.getElementById("kpiEthDelta"), OVERVIEW.ethereum.change_24h);
+  countUp(document.getElementById("kpiMcap"), OVERVIEW.total_market_cap, fmtCompact);
+  countUp(document.getElementById("kpiCoins"), OVERVIEW.coins_tracked, n => String(Math.round(n)));
+  document.getElementById("kpiMover").textContent = OVERVIEW.top_mover.name;
+  setDelta(document.getElementById("kpiMoverDelta"), OVERVIEW.top_mover.change_24h);
+  drawSpark();
+}
+
+function drawSpark() {
+  const btc = HISTORY.coins[0];                      // slot 0 = rank 1 = bitcoin
+  const tail = btc.prices.slice(-12);
+  const svg = document.getElementById("btcSpark");
+  const min = Math.min(...tail), max = Math.max(...tail), span = (max - min) || 1;
+  const pts = tail.map((p, i) =>
+    (4 + i * (142 / 11)).toFixed(1) + "," +
+    (26 - ((p - min) / span) * 22).toFixed(1)).join(" ");
+  const ns = "http://www.w3.org/2000/svg";
+  const poly = document.createElementNS(ns, "polyline");
+  poly.setAttribute("points", pts);
+  poly.setAttribute("fill", "none");
+  poly.setAttribute("stroke", INK.baseline);
+  poly.setAttribute("stroke-width", "2");
+  poly.setAttribute("stroke-linejoin", "round");
+  const last = document.createElementNS(ns, "circle");
+  last.setAttribute("cx", 4 + 11 * (142 / 11));
+  last.setAttribute("cy", 26 - ((tail[11] - min) / span) * 22);
+  last.setAttribute("r", "4");
+  last.setAttribute("fill", SLOTS[0]);
+  last.setAttribute("stroke", INK.surface);
+  last.setAttribute("stroke-width", "2");
+  svg.replaceChildren(poly, last);
+}
+
+/* ---------- price chart ---------- */
+
+function buildChips() {
+  const box = document.getElementById("coinChips");
+  HISTORY.coins.forEach(coin => {
+    if (coin.id === "bitcoin" || coin.id === "ethereum") state.selected.add(coin.id);
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.setAttribute("aria-pressed", state.selected.has(coin.id));
+    b.style.setProperty("--slot-color", SLOTS[coin.slot]);
+    const dot = document.createElement("span"); dot.className = "swatch";
+    const name = document.createElement("span");
+    name.textContent = coin.symbol.toUpperCase();
+    b.append(dot, name);
+    b.addEventListener("click", () => {
+      if (state.selected.has(coin.id)) {
+        if (state.selected.size === 1) return;        // never zero series
+        state.selected.delete(coin.id);
+      } else {
+        if (state.selected.size >= 4) return;         // legibility cap
+        state.selected.add(coin.id);
+      }
+      b.setAttribute("aria-pressed", state.selected.has(coin.id));
+      updatePriceChart();
+    });
+    box.append(b);
+  });
+}
+
+function priceChartData() {
+  const window_ = state.range;
+  return HISTORY.coins
+    .filter(c => state.selected.has(c.id))
+    .map(c => {
+      const dates = c.dates.slice(-window_);
+      const prices = c.prices.slice(-window_);
+      const volumes = c.volumes.slice(-window_);
+      const base = state.mode === "idx" ? prices[0] : null;
+      return {
+        name: c.symbol.toUpperCase(),
+        color: SLOTS[c.slot],
+        dates,
+        values: base ? prices.map(p => +(100 * p / base).toFixed(2)) : prices,
+        volumes,
+      };
+    });
+}
+
+function buildPriceChart() {
+  charts.price = echarts.init(document.getElementById("priceChart"));
+  updatePriceChart();
+}
+
+function updatePriceChart() {
+  const data = priceChartData();
+  const shared = data.length ? data[0].dates : [];
+  const single = data.length === 1;
+
+  charts.price.setOption({
+    animation: !REDUCED,
+    animationDuration: 650,
+    animationEasing: "cubicOut",
+    grid: { left: 8, right: 16, top: 18, bottom: 4, containLabel: true },
+    xAxis: {
+      type: "category", boundaryGap: false, data: shared,
+      axisLine: { lineStyle: { color: INK.baseline } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: INK.muted, fontSize: 11, fontFamily: "system-ui",
+        formatter: d => new Date(d).toLocaleDateString("en-US",
+          { month: "short", day: "numeric", timeZone: "UTC" }),
+      },
+    },
+    yAxis: {
+      type: "value", scale: true,
+      splitLine: { lineStyle: { color: INK.grid, width: 1, type: "solid" } },
+      axisLabel: {
+        color: INK.muted, fontSize: 11, fontFamily: "system-ui",
+        formatter: v => state.mode === "usd"
+          ? (v >= 1000 ? "$" + Math.round(v / 1000) + "K" : "$" + v)
+          : String(v),
+      },
+    },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "line", snap: true, lineStyle: { color: INK.baseline } },
+      backgroundColor: "#0d0d0d", borderColor: "rgba(255,255,255,0.14)",
+      textStyle: { color: INK.secondary, fontSize: 12.5, fontFamily: "system-ui" },
+      formatter: params => {
+        const rows = params.map(p => {
+          const vol = data[p.seriesIndex].volumes[p.dataIndex];
+          return '<div style="display:flex;align-items:center;gap:8px;margin-top:5px">' +
+            '<span style="width:10px;height:2px;border-radius:1px;flex:0 0 auto;background:' +
+            p.color + '"></span>' +
+            '<span style="color:' + INK.muted + '">' + esc(p.seriesName) + "</span>" +
+            '<span style="margin-left:auto;font-weight:600;color:' + INK.primary + '">' +
+            (state.mode === "usd" ? fmtPrice(p.value) : p.value.toFixed(1)) + "</span>" +
+            "</div>" +
+            '<div style="margin:-2px 0 0 18px;font-size:11px;color:' + INK.muted +
+            '">vol ' + fmtCompact(vol) + "</div>";
+        }).join("");
+        return '<div style="font-weight:600;color:' + INK.primary + '">' +
+          esc(params[0].axisValueLabel) + "</div>" + rows;
+      },
+    },
+    series: data.map(d => ({
+      name: d.name, type: "line", data: d.values,
+      showSymbol: false, symbolSize: 9,
+      lineStyle: { width: 2, cap: "round", join: "round" },
+      itemStyle: { color: d.color, borderColor: INK.surface, borderWidth: 2 },
+      emphasis: { focus: "none" },
+      areaStyle: single ? { color: d.color, opacity: 0.10 } : undefined,
+      endLabel: {
+        show: data.length <= 4, distance: 8,
+        color: INK.secondary, fontSize: 11,
+        formatter: () => (state.mode === "usd" ? fmtPrice(d.values.at(-1)) : d.values.at(-1).toFixed(0)),
+      },
+    })),
+  }, { notMerge: true });
+
+  const note = document.getElementById("priceNote");
+  note.textContent = state.mode === "idx"
+    ? "Indexed to 100 at the start of the selected window — compare shape, not price level."
+    : (single
+      ? "Single series — the area wash carries the hue; the chip row is the selector."
+      : "Up to 4 coins; each keeps its own fixed color whatever the selection.");
+}
+
+/* ---------- market-cap bars ---------- */
+
+function buildMcapChart() {
+  const coins = TOP.coins.slice(0, 10);
+  charts.mcap = echarts.init(document.getElementById("mcapChart"));
+  charts.mcap.setOption({
+    animation: !REDUCED, animationDuration: 700, animationEasing: "cubicOut",
+    grid: { left: 8, right: 64, top: 8, bottom: 4, containLabel: true },
+    xAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: INK.grid, width: 1, type: "solid" } },
+      axisLabel: { color: INK.muted, fontSize: 11, formatter: v => fmtCompact(v).replace("$", "") },
+    },
+    yAxis: {
+      type: "category", inverse: true,
+      data: coins.map(c => c.symbol.toUpperCase()),
+      axisLine: { lineStyle: { color: INK.baseline } },
+      axisTick: { show: false },
+      axisLabel: { color: INK.secondary, fontSize: 12, fontFamily: "system-ui" },
+    },
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "#0d0d0d", borderColor: "rgba(255,255,255,0.14)",
+      textStyle: { color: INK.secondary, fontSize: 12.5, fontFamily: "system-ui" },
+      formatter: p => {
+        const c = coins[p.dataIndex];
+        return '<div style="font-weight:600;color:' + INK.primary + '">' +
+          esc(c.name) + " · " + esc(c.symbol.toUpperCase()) + "</div>" +
+          '<div style="margin-top:4px">cap <b style="color:' + INK.primary + '">' +
+          fmtCompact(c.market_cap) + "</b></div>" +
+          "<div>price " + fmtPrice(c.price) + " · 24h " +
+          (c.change_24h >= 0 ? "+" : "") + c.change_24h.toFixed(2) + "%</div>";
+      },
+    },
+    series: [{
+      type: "bar", data: coins.map(c => c.market_cap),
+      barWidth: 18,
+      itemStyle: { color: SLOTS[0], borderRadius: [0, 4, 4, 0] },
+      label: {
+        show: true, position: "right", color: INK.secondary,
+        fontSize: 11.5, fontFamily: "system-ui",
+        formatter: p => fmtCompact(coins[p.dataIndex].market_cap),
+      },
+    }],
+  });
+}
+
+/* ---------- weekday pattern ---------- */
+
+function buildWeekdayChart() {
+  const days = WEEKDAY.days;
+  charts.weekday = echarts.init(document.getElementById("weekdayChart"));
+  charts.weekday.setOption({
+    animation: !REDUCED, animationDuration: 700, animationEasing: "cubicOut",
+    grid: { left: 8, right: 8, top: 26, bottom: 4, containLabel: true },
+    xAxis: {
+      type: "category", data: days.map(d => d.day),
+      axisLine: { lineStyle: { color: INK.baseline } },
+      axisTick: { show: false },
+      axisLabel: { color: INK.secondary, fontSize: 12, fontFamily: "system-ui" },
+    },
+    yAxis: {
+      type: "value",
+      splitLine: { lineStyle: { color: INK.grid, width: 1, type: "solid" } },
+      axisLabel: { color: INK.muted, fontSize: 11, formatter: v => v + "%" },
+    },
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "#0d0d0d", borderColor: "rgba(255,255,255,0.14)",
+      textStyle: { color: INK.secondary, fontSize: 12.5, fontFamily: "system-ui" },
+      formatter: p => {
+        const d = days[p.dataIndex];
+        return "<div><b style=\"color:" + INK.primary + "\">" + d.day + "</b> (n=" +
+          d.days_counted + ")</div>" +
+          '<div style="margin-top:4px">avg move <b style="color:' +
+          (d.avg_change_pct >= 0 ? INK.good : INK.critical) + '">' +
+          (d.avg_change_pct >= 0 ? "+" : "") + d.avg_change_pct.toFixed(2) + "%</b></div>" +
+          "<div>avg price " + fmtPrice(d.avg_price) + "</div>";
+      },
+    },
+    series: [{
+      type: "bar",
+      data: days.map(d => ({
+        value: d.avg_change_pct,
+        itemStyle: {
+          color: d.avg_change_pct >= 0 ? INK.good : INK.critical,
+          borderRadius: [4, 4, 0, 0],
+        },
+      })),
+      barWidth: 22,
+      label: {
+        show: true, position: "top", color: INK.secondary, fontSize: 11,
+        fontFamily: "system-ui",
+        formatter: p => (p.value >= 0 ? "+" : "") + p.value.toFixed(2) + "%",
+      },
+    }],
+  });
+}
+
+/* ---------- table ---------- */
+
+let sortKey = "rank", sortDir = 1;
+
+function buildTable() {
+  document.querySelectorAll("#coinTable th").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      sortDir = (key === sortKey) ? -sortDir : 1;
+      sortKey = key;
+      renderTable();
+    });
+  });
+  document.getElementById("coinSearch").addEventListener("input", renderTable);
+  renderTable();
+}
+
+function renderTable() {
+  const q = document.getElementById("coinSearch").value.trim().toLowerCase();
+  document.querySelectorAll("#coinTable th").forEach(th => {
+    const on = th.dataset.key === sortKey;
+    th.querySelector(".sort-arrow")?.remove();
+    if (on) {
+      const a = document.createElement("span");
+      a.className = "sort-arrow";
+      a.textContent = sortDir === 1 ? "▲" : "▼";
+      th.append(a);
+    }
+  });
+
+  const rows = TOP.coins
+    .filter(c => !q || c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q))
+    .slice()
+    .sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey];
+      const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      return cmp * sortDir;
+    });
+
+  const tbody = document.querySelector("#coinTable tbody");
+  tbody.replaceChildren();
+  for (const c of rows) {
+    const tr = document.createElement("tr");
+
+    const tdRank = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "rank-badge";
+    badge.textContent = c.rank;
+    tdRank.append(badge);
+
+    const tdName = document.createElement("td");
+    tdName.className = "name";
+    const cell = document.createElement("div");
+    cell.className = "coin-cell";
+    const n1 = document.createElement("span"); n1.textContent = c.name;
+    const n2 = document.createElement("span"); n2.className = "sym";
+    n2.textContent = c.symbol.toUpperCase();
+    cell.append(n1, n2);
+    tdName.append(cell);
+
+    const tdPrice = document.createElement("td"); tdPrice.textContent = fmtPrice(c.price);
+    const tdChg = document.createElement("td");
+    tdChg.textContent = fmtPct(c.change_24h);
+    tdChg.className = pctClass(c.change_24h);
+    const tdCap = document.createElement("td"); tdCap.textContent = fmtCompact(c.market_cap);
+    const tdVol = document.createElement("td"); tdVol.textContent = fmtCompact(c.volume);
+
+    tr.append(tdRank, tdName, tdPrice, tdChg, tdCap, tdVol);
+    tbody.append(tr);
+  }
+}
+
+/* ---------- pipeline stats + reveal ---------- */
+
+function renderPipeStats() {
+  document.getElementById("pipeFact").textContent =
+    OVERVIEW.fact_rows.toLocaleString("en-US");
+  document.getElementById("pipeDates").textContent =
+    OVERVIEW.dim_dates.toLocaleString("en-US") + " days";
+}
+
+function observeReveals() {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+}
+</script>
+</body>
+</html>
