@@ -5,6 +5,37 @@ future session (or future me) can pick up cold.*
 
 ---
 
+## Day 3 — 2026-10-11 (GitHub Actions) — DONE
+
+**Built:** `.github/workflows/daily-pipeline.yml` — cron `5 1 * * *`
+(6:35 AM IST daily) + `workflow_dispatch` manual button. Ubuntu runner:
+setup-python 3.12 → pip install (requests, dotenv, snowflake-connector,
+dbt-snowflake) → `python pipelines/extract_load.py` → `dbt build` with
+`DBT_PROFILES_DIR: .` and `working-directory: dbt`. Secrets injected as job
+env (SNOWFLAKE_ACCOUNT/USER/PASSWORD from repo secrets; warehouse/db plain).
+
+**Repo published:** github.com/vinn27/crypto-market-elt (public, pushed via
+gh CLI). Verified `.env` not tracked (git ls-files) before push. Secrets set
+via `gh secret set` reading values from .env in a loop (values never typed
+into commands); `gh secret list` confirmed all 3.
+
+**Password rotation:** user rotated Snowflake password (workbook ALTER
+USER), local .env updated, connection re-verified. Note: the new password
+was pasted into chat again — accepted for throwaway trial, but the
+vault-only habit still needs reinforcing with the user.
+
+**First cloud run: SUCCESS** (run 38121461117). Verified fresh data:
+loaded_at 07:31 UTC Oct 11; fact 890→910 rows (Oct 10 + Oct 11 × 10 coins);
+dim_date 90→92 rows. Pipeline is now fully autonomous.
+
+**Next:** final piece — `dbt docs generate` static site → Netlify
+(permanent live URL), plus README polish + interview story. That completes
+D14–16.
+
+---
+
+---
+
 ## Day 2 — 2026-10-10 (dbt: staging layer) — DONE
 
 **Built:** `dbt/` project — `dbt_project.yml`, `profiles.yml` (env_var-based,
