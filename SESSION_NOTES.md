@@ -5,6 +5,49 @@ future session (or future me) can pick up cold.*
 
 ---
 
+## Day 3, part 2 — 2026-10-11 (dashboard + docs + compute safety) — BUILT
+
+**Compute/memory protection (the WikiPulse lesson applied):**
+- `setup_snowflake.py` now sets `AUTO_SUSPEND=60`, `AUTO_RESUME=TRUE`,
+  `STATEMENT_TIMEOUT_IN_SECONDS=600` on COMPUTE_WH — idle billing stops after
+  60s; runaway queries die at 10 min. Trial credits cannot bleed unattended.
+- Nothing scheduled on the local machine; the heavy work is GitHub's runner.
+- Dashboard visitors hit static JSON on Netlify's CDN — never Snowflake.
+
+**Export layer:** `pipelines/export_dashboard_data.py` — queries staging +
+marts, writes `dashboard/data/{overview,history,top_coins,weekday}.json`.
+History = top 8 coins (palette has exactly 8 slots; never cycle), fixed
+slot per coin so color follows the entity.
+
+**Dashboard** (`dashboard/index.html` + `assets/base.css`): dark theme,
+ECharts via CDN. KPI tiles with count-ups + BTC sparkline; 90-day price
+chart with coin chips (max 4, min 1), 7/30/90D ranges, USD ↔ indexed-to-100
+toggle (single axis — no dual-axis anti-pattern); top-10 market-cap bars;
+weekday avg day-over-day change columns (diverging by sign); sortable +
+searchable top-20 table (the table view); pipeline panel with animated flow.
+Palette validated with the dataviz six-checks script (worst adjacent CVD
+ΔE 10.3 = floor band → mitigated: legend chips, tooltip line-keys, table).
+Dynamic strings via textContent / escaped helper. Reduced-motion respected.
+
+**Docs page** (`dashboard/docs.html`): 8 sections — zones, source,
+architecture (ELT callout), star schema, quality checks, freshness, stack,
+reproduce. Shares base.css design language.
+
+**Workflow:** added `permissions: contents: write`, export step, and
+pipeline-bot data commit (`data: refresh YYYY-MM-DD`) — the commit is what
+triggers Netlify's rebuild each night.
+
+**Local verification:** all files 200 via throwaway http.server; JSON shapes
+checked (8 coins, slots 0-7, 92 aligned points, 20 rows, 7 weekdays).
+
+**PENDING:** Netlify Git integration (user, UI): Import from Git → repo →
+publish directory `dashboard`, no build command. Then README final polish +
+interview story + optional dbt-docs page.
+
+---
+
+---
+
 ## Day 3 — 2026-10-11 (GitHub Actions) — DONE
 
 **Built:** `.github/workflows/daily-pipeline.yml` — cron `5 1 * * *`

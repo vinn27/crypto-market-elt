@@ -56,10 +56,17 @@ jobs:
 
       # Committing the fresh JSON triggers Netlify's rebuild, so the site
       # updates itself right after the warehouse does.
-      - name: Commit fresh data (redeploys the dashboard)
+      - name: Commit fresh data
         run: |
           git config user.name "pipeline-bot"
           git config user.email "actions@github.com"
           git add dashboard/data
           git diff --cached --quiet || git commit -m "data: refresh $(date -u +%F)"
           git push
+
+      # Deploys the dashboard (with the fresh JSON from the export step)
+      # straight from the runner to Netlify's CDN.
+      - name: Deploy dashboard to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: npx --yes netlify-cli deploy --prod --dir dashboard --site d82d6d26-0dd7-4954-86c7-6264ae938f06
