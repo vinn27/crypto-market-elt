@@ -9,7 +9,7 @@ name: Daily crypto ELT
 
 on:
   schedule:
-    - cron: "5 1 * * *"
+    - cron: "13 1 * * *"   # 01:13 UTC = 06:43 IST; off the busy :05 slot
   workflow_dispatch:
 
 # The data commit step needs write access to the repo.
@@ -21,12 +21,15 @@ jobs:
     runs-on: ubuntu-latest
 
     # Non-secret settings visible to every step; secrets come from GitHub's vault.
+    # NETLIFY_AUTH_TOKEN is exposed at job level because the `secrets` context
+    # is not allowed inside step-level `if` conditions.
     env:
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
       SNOWFLAKE_WAREHOUSE: COMPUTE_WH
       SNOWFLAKE_DATABASE: CRYPTO_DB
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
 
     steps:
       - name: Check out the code
@@ -68,7 +71,5 @@ jobs:
       # straight from the runner to Netlify's CDN. Skips cleanly until the
       # NETLIFY_AUTH_TOKEN secret exists in the repo's vault.
       - name: Deploy dashboard to Netlify
-        if: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        if: ${{ env.NETLIFY_AUTH_TOKEN != '' }}
         run: npx --yes netlify-cli deploy --prod --dir dashboard --site d82d6d26-0dd7-4954-86c7-6264ae938f06
