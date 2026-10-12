@@ -65,8 +65,10 @@ jobs:
           git push
 
       # Deploys the dashboard (with the fresh JSON from the export step)
-      # straight from the runner to Netlify's CDN.
+      # straight from the runner to Netlify's CDN. Skips cleanly until the
+      # NETLIFY_AUTH_TOKEN secret exists in the repo's vault.
       - name: Deploy dashboard to Netlify
+        if: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: npx --yes netlify-cli deploy --prod --dir dashboard --site d82d6d26-0dd7-4954-86c7-6264ae938f06
