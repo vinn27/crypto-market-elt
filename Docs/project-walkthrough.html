@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Crypto Market ELT — Complete Project Walkthrough</title>
+<style>
+  @page { size: A4; margin: 15mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #1c1c1a; font-size: 10pt; line-height: 1.52; margin: 0;
+  }
+  code {
+    font-family: ui-monospace, Consolas, monospace; font-size: 0.87em;
+    background: #f0f0ec; border: 1px solid #e0e0d8; border-radius: 3px; padding: 0 4px;
+  }
+  pre {
+    font-family: ui-monospace, Consolas, monospace; font-size: 8.3pt;
+    background: #f6f6f2; border: 1px solid #e0e0d8; border-radius: 4px;
+    padding: 2.5mm 3.5mm; overflow: hidden; line-height: 1.45;
+  }
+  pre .c { color: #898781; }
+  a { color: #1c5cab; }
+
+  .cover { padding: 6mm 0 4mm; border-bottom: 3px solid #2a78d6; margin-bottom: 5mm; }
+  .cover h1 { font-size: 21pt; letter-spacing: -0.5px; margin: 0 0 2mm; }
+  .cover .sub { font-size: 11pt; color: #52514e; margin: 0 0 3mm; }
+  .cover .meta { font-size: 8.5pt; color: #898781; }
+
+  h2 {
+    font-size: 13.5pt; letter-spacing: -0.3px; margin: 7mm 0 2.5mm;
+    padding-bottom: 1.2mm; border-bottom: 1.5px solid #2a78d6;
+  }
+  h3 { font-size: 11pt; margin: 4.5mm 0 1.5mm; color: #184f95; }
+  h4 { font-size: 10pt; margin: 3.5mm 0 1mm; }
+  p { margin: 0 0 2.3mm; }
+  ul { margin: 0 0 2.8mm; padding-left: 5mm; }
+  li { margin-bottom: 1.1mm; }
+  .page { page-break-before: always; }
+
+  .box {
+    border: 1px solid #e0e0d8; border-left: 3px solid #2a78d6; border-radius: 4px;
+    padding: 2.5mm 3.5mm; margin: 0 0 3mm; break-inside: avoid;
+  }
+  .box.warn { border-left-color: #d03b3b; background: #fdf6f6; }
+  .box.ok   { border-left-color: #0ca30c; background: #f4fbf4; }
+  .box.idea { border-left-color: #c98500; background: #fdfaf2; }
+  .box h4 { margin: 0 0 1mm; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 8.8pt; margin: 2mm 0 3.5mm; }
+  th { text-align: left; background: #f0f0ec; border-bottom: 1.5px solid #c9c8c0; padding: 1.6mm; }
+  td { border-bottom: 1px solid #e8e8e0; padding: 1.4mm 1.6mm; vertical-align: top; }
+  td:first-child { font-weight: 600; }
+
+  .qa { break-inside: avoid; margin-bottom: 2.8mm; }
+  .qa b { color: #184f95; }
+  .footer-note { color: #898781; font-size: 8pt; margin-top: 5mm; border-top: 1px solid #e0e0d8; padding-top: 2mm; }
+  .flow { display: flex; align-items: center; margin: 3mm 0; flex-wrap: wrap; }
+  .fnode { border: 1px solid #d5d5cc; border-radius: 4px; padding: 1.6mm 2.4mm; text-align: center; background: #fafaf7; font-size: 8.3pt; }
+  .fnode b { display: block; font-size: 8.8pt; }
+  .farrow { color: #2a78d6; padding: 0 1.4mm; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ================= COVER ================= -->
+<div class="cover">
+  <h1>Crypto Market ELT — the complete walkthrough</h1>
+  <p class="sub">Everything we built, every concept we used, explained slowly with real examples
+  from the project. Written as a study companion — no assumed knowledge beyond
+  "I know some SQL and some Python".</p>
+  <p class="meta">
+    Project: github.com/vinn27/crypto-market-elt · dashboard: crypto-market-elt.netlify.app ·
+    built 9–12 October 2026
+  </p>
+</div>
+
+<p><b>How to read this document:</b> Chapters 1–9 follow the data's journey from a public
+website to a live dashboard — the same order the pipeline actually runs in. Chapter 10
+covers the dashboard-design lessons, Chapter 11 is interview rehearsal, and Chapter 12
+is a map of every file in the repo. Whenever we hit a problem during the build, it
+appears in a red box like the one below — those boxes are the most valuable parts,
+because interviewers love asking "what went wrong?".</p>
+
+<div class="box warn">
+<h4>Real example of a problem box</h4>
+Every red box in this document is a genuine failure from this build — the actual error
+message, why it happened, and how we fixed it. Nothing is invented.
+</div>
+
+<!-- ================= CH1 ================= -->
+<div class="page">
+<h2>1 · The big picture — what we built and why</h2>
+
+<h3>1.1 The one-paragraph story</h3>
+<p>Every morning at 06:43 IST, GitHub (for free) lends us a small computer. It runs a
+Python script that downloads crypto-market data from a public website. The script dumps
+that data, completely untouched, into a cloud data warehouse called <b>Snowflake</b>. A
+tool called <b>dbt</b> then cleans and reshapes that data inside Snowflake using SQL,
+checks it with 15 automated tests, and builds a small "star schema". Finally, the numbers
+are exported to small files and published as a live, animated dashboard on
+<b>Netlify</b>. No human presses any button. The whole thing costs ₹0.</p>
+
+<div class="flow">
+  <div class="fnode"><b>CoinGecko</b>website API</div><div class="farrow">→</div>
+  <div class="fnode"><b>Python</b>download &amp; dump</div><div class="farrow">→</div>
+  <div class="fnode"><b>Snowflake RAW</b>untouched storage</div><div class="farrow">→</div>
+  <div class="fnode"><b>dbt</b>clean + test (SQL)</div><div class="farrow">→</div>
+  <div class="fnode"><b>Star schema</b>fact + dims</div><div class="farrow">→</div>
+  <div class="fnode"><b>JSON export</b>small files</div><div class="farrow">→</div>
+  <div class="fnode"><b>Netlify</b>live dashboard</div>
+</div>
+
+<h3>1.2 Each tool's job, with an everyday analogy</h3>
+<table>
+  <tr><th>Tool</th><th>Its job</th><th>Everyday version</th></tr>
+  <tr><td>CoinGecko API</td><td>The data source — a website that gives data instead of pages</td><td>A shopkeeper who answers questions about today's prices</td></tr>
+  <tr><td>Python + requests</td><td>Fetches data and loads it — nothing else, by rule</td><td>The delivery boy: picks up the groceries, puts them in the fridge, doesn't cook</td></tr>
+  <tr><td>Snowflake</td><td>Cloud data warehouse — stores and queries analytics data</td><td>The fridge + a rented kitchen you pay for only while cooking</td></tr>
+  <tr><td>dbt</td><td>Runs SQL transformations, tests, and documentation</td><td>The chef following a recipe book where every recipe is a small SQL file</td></tr>
+  <tr><td>GitHub Actions</td><td>Runs the whole thing on a schedule, on GitHub's computers</td><td>An alarm clock + a robot that follows one recipe file every morning</td></tr>
+  <tr><td>Netlify + CDN</td><td>Serves the dashboard worldwide for free</td><td>A shop window: anyone can look, nobody enters the kitchen</td></tr>
+</table>
+
+<h3>1.3 Why we chose this stack (the honest reasons)</h3>
+<ul>
+  <li><b>Snowflake + dbt</b> appear together in most 2026 data-engineering job
+  descriptions — and this project gave hands-on time with both.</li>
+  <li><b>Everything free, no credit card:</b> Snowflake trial (30 days, email only),
+  GitHub Actions free minutes for public repos, Netlify free tier, CoinGecko public
+  API without a key.</li>
+  <li><b>ELT on purpose:</b> my earlier stock-market project was classic
+  <b>ETL</b> (PySpark cleaned data <i>outside</i> the database, then loaded MySQL).
+  This project is the opposite pattern — load raw first, clean inside the warehouse —
+  so together the two projects show both industry patterns.</li>
+</ul>
+
+<div class="box">
+<h4>ETL vs ELT — the core idea of this whole project</h4>
+<p><b>ETL (old way):</b> Extract → <b>T</b>ransform (clean in Python/Spark) → Load.
+If your cleaning logic is wrong, the raw data is already gone — you must re-download
+everything.</p>
+<p><b>ELT (our way):</b> Extract → Load raw <i>first</i> → <b>T</b>ransform inside the
+warehouse. Raw data is preserved forever. Wrong logic? Fix the SQL, re-run, done —
+history is still sitting there untouched in the RAW layer.</p>
+<p>Modern warehouses made this possible: Snowflake is so fast at SQL that copying data
+out to Spark just to clean it stopped making sense for analytics work.</p>
+</div>
+</div>
+
+<!-- ================= CH2 ================= -->
+<div class="page">
+<h2>2 · The source — understanding CoinGecko's API</h2>
+
+<h3>2.1 What an API actually is (in simple words)</h3>
+<p>When you open coingecko.com in a browser, you get a pretty page meant for human eyes.
+The same company also offers a <b>second door</b> for programs: you send a URL, and
+instead of a pretty page you get raw data back — usually as <b>JSON</b>. That second
+door is the API. Free, no key needed for basic use, with one catch we'll meet soon:
+<b>rate limits</b> — you may only knock so many times per minute.</p>
+
+<h3>2.2 The two doors we used</h3>
+<table>
+  <tr><th>Endpoint (URL)</th><th>What it gives</th><th>Where it lands</th></tr>
+  <tr><td><code>/coins/markets</code></td><td>One snapshot: top-50 coins, current price, market cap, 24h volume, ranks…</td><td><code>RAW.COINS_MARKETS</code></td></tr>
+  <tr><td><code>/coins/{id}/market_chart</code></td><td>History: daily price, market cap and volume for ~90 days, one coin per call</td><td><code>RAW.COIN_MARKET_CHART</code></td></tr>
+</table>
+
+<h3>2.3 What the data actually looks like</h3>
+<p>We always inspect the source <i>before</i> writing code. The snapshot endpoint returns
+a list of objects — here's the first one, trimmed (26 fields per coin; numbers and text
+mixed, some fields sometimes <code>null</code>):</p>
+<pre>{
+  "id": "bitcoin",
+  "symbol": "btc",
+  "name": "Bitcoin",
+  "current_price": 82506,
+  "market_cap": 1658126145503,
+  "market_cap_rank": 1,
+  "total_volume": 39828442115,
+  "high_24h": 83111,
+  "low_24h": 80427,
+  "price_change_percentage_24h": -0.56848,
+  "ath": 126512,        <span class="c">// all-time high</span>
+  "ath_date": "2026-01-19T04:15:32.000Z",
+  "last_updated": "2026-10-09T08:15:32.104Z"
+  ...</pre>
+<p>The history endpoint has a trickier shape — <b>three parallel arrays</b>, where each
+item is a pair of <code>[milliseconds-timestamp, value]</code>:</p>
+<pre>{
+  "prices":        [[1790726400000, 83640.10], [1790812800000, 83576.13], ...],
+  "market_caps":   [[1790726400000, 1680405670009.9], ...],
+  "total_volumes": [[1790726400000, 29007802596.08], ...]
+}</pre>
+<p>"Parallel arrays" means: position 0 of <code>prices</code>, position 0 of
+<code>market_caps</code> and position 0 of <code>total_volumes</code> all describe the
+<b>same day</b>. To turn that into normal rows, our Python <i>zips</i> them together —
+that's the one piece of "unboxing" the extract does (Chapter 3.4).</p>
+
+<div class="box warn">
+<h4>Problem 3 — the source lies about completeness</h4>
+<p>We asked for 90 days of history for the top-10 coins. Nine coins returned 91 points
+each. <code>figure-heloc</code> returned only <b>81</b> — the coin is simply younger
+than 90 days. Also, those "91 points for 90 days"? The API gives one point per day at
+00:00 UTC <i>plus</i> one live "now" point — so two points share today's date. Both
+quirks are normal source messiness: the pipeline must absorb them without breaking
+(Chapters 5 and 7 show how the schema and tests handle exactly this).</p>
+</div>
+</div>
+
+<!-- ================= CH3 ================= -->
+<div class="page">
+<h2>3 · Extract + Load — the Python part, file by file</h2>
+<p>The code lives in <code>pipelines/extract_load.py</code>. One rule governs the whole
+file: <b>Python only downloads and dumps. No cleaning, no renaming, no business
+logic.</b> Everything clever happens later, in SQL, inside the warehouse.</p>
+
+<h3>3.1 The fetch (with polite retries)</h3>
+<pre>def get_with_retry(url, params):
+    for attempt in range(1, MAX_RETRIES + 1):          <span class="c"># up to 5 tries</span>
+        r = requests.get(url, params=params, timeout=30)
+        if r.status_code in (429, 503, 504) and attempt < MAX_RETRIES:
+            wait = int(r.headers.get("Retry-After", 30)) <span class="c"># server says how long to wait</span>
+            print(f"rate-limited ({r.status_code}): backing off {wait}s")
+            time.sleep(wait)
+            continue                                   <span class="c"># try again after waiting</span>
+        r.raise_for_status()                           <span class="c"># any other error -> crash loudly</span>
+        return r.json()</pre>
+<p><b>Why this exists —</b> HTTP <code>429 Too Many Requests</code> means "you're
+knocking too fast, come back later". Many APIs include a <code>Retry-After</code> header
+telling you exactly how long to wait. Reading it and waiting is called <b>backoff</b>.
+Between history calls we also sleep 10 seconds out of politeness.</p>
+
+<div class="box warn">
+<h4>Problem 2 — blocked mid-run</h4>
+<p>Our very first run loaded 50 snapshot rows + 6 coins of history, then died:
+<code>429 Client Error: Too Many Requests for url .../coins/solana/market_chart</code>.
+Our 7-second pause was too fast for the free tier. Fix = the retry function above (plus
+a longer pause). The re-run survived an actual 429 mid-flight: it printed
+"backing off 5s" and continued to green. Lesson: a bigger sleep alone is a guess;
+<b>retry-with-backoff is the pattern</b> — every serious ingestion tool has it built in.</p>
+</div>
+
+<h3>3.2 The load — and what "raw" means in practice</h3>
+<p>"Land it as-is" has precise rules we followed in the table design:</p>
+<ul>
+  <li>JSON numbers → <code>FLOAT</code> columns (the value passes through untouched).</li>
+  <li>JSON text → <code>VARCHAR</code>, <b>even dates</b>. Casting is transformation,
+  and transformation belongs to dbt. So <code>ath_date</code> lands as the string
+  <code>"2026-01-19T04:15:32.000Z"</code> — dbt turns it into a real timestamp later.</li>
+  <li>Column names copy the API field names <i>exactly</i> (<code>id</code>, not
+  <code>coin_id</code>) — renaming is also transformation.</li>
+  <li>One extra column the API never sends: <code>loaded_at</code>, filled by Snowflake
+  itself (<code>DEFAULT CURRENT_TIMESTAMP()</code>) — a stamp saying when this row
+  arrived. It powers everything in Chapter 5.</li>
+</ul>
+<pre>CREATE TABLE IF NOT EXISTS RAW.COIN_MARKET_CHART (
+    coin_id      VARCHAR,
+    price_date   DATE,        <span class="c"># derived from ms-timestamp, only to unpack the array</span>
+    price        FLOAT,
+    market_cap   FLOAT,
+    total_volume FLOAT,
+    loaded_at    TIMESTAMP_TZ DEFAULT CURRENT_TIMESTAMP()
+)</pre>
+
+<div class="box warn">
+<h4>Problem 1 — invalid identifier 'ID'</h4>
+<p>First insert crashed with
+<code>000904: SQL compilation error: invalid identifier 'ID'</code>. Cause: my first
+table design "helpfully" renamed <code>id</code> to <code>coin_id</code>, but the INSERT
+listed the API's field names. Column list ≠ table shape. Fix: keep API names in RAW;
+<code>stg_coins</code> does <code>id AS coin_id</code> later — which is exactly where
+renaming belongs. (Side-lesson: <code>CREATE TABLE IF NOT EXISTS</code> won't fix a
+wrong existing table — we had to DROP it first.)</p>
+</div>
+
+<h3>3.3 Unpacking the parallel arrays</h3>
+<pre>for (ts_ms, price), (_t, market_cap), (_t2, total_volume) in zip(
+        data["prices"], data["market_caps"], data["total_volumes"]):
+    price_date = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).date()
+    rows.append((coin_id, price_date, price, market_cap, total_volume))</pre>
+<p><code>zip()</code> walks the three arrays together; converting
+<code>1790726400000</code> (milliseconds) into the date <code>2026-09-30</code> is
+<i>structural unpacking</i>, not transformation — the values themselves are untouched.</p>
+
+<h3>3.4 Inserting into Snowflake</h3>
+<p>We use the connector's <code>executemany()</code> with one INSERT — the Snowflake
+driver optimizes it into a single bulk multi-row insert. At our scale (~1,000 rows) this
+takes seconds. The production-scale path (millions of rows) would be: write a file to a
+Snowflake <b>stage</b>, then <code>COPY INTO</code> — same warehouse, same ELT story,
+different loader. Good line for interviews: "I know executemany was fine at 1K rows and
+where I'd switch to COPY."</p>
+
+<h3>3.5 Idempotency — why re-running never breaks anything</h3>
+<p>RAW tables are <b>append-only</b>: we never UPDATE or DELETE. Run the script twice?
+You get two copies of bitcoin's row, each stamped with its own <code>loaded_at</code>.
+That sounds like a bug; it's actually a design choice — the cleaning layer decides which
+copy wins ("the newest one"), so loading is always safe. "Safe to re-run" is what the
+word <b>idempotent</b> means.</p>
+</div>
+
+<!-- ================= CH4 ================= -->
+<div class="page">
+<h2>4 · Snowflake — the warehouse, explained properly</h2>
+
+<h3>4.1 The object model (what contains what)</h3>
+<pre>ACCOUNT      VZJVHYS-IC67204            <span class="c"># the tenant you log into</span>
+ └─ DATABASE   CRYPTO_DB                  <span class="c"># like a MySQL database</span>
+     ├─ SCHEMA RAW                        <span class="c"># a namespace inside the db</span>
+     ├─ SCHEMA STAGING                    <span class="c"># our three medallion layers…</span>
+     └─ SCHEMA MARTS                      <span class="c"># …as three schemas</span>
+WAREHOUSE    COMPUTE_WH                   <span class="c"># compute, NOT storage (see 4.3)</span>
+ROLE / USER                               <span class="c"># permissions / login identity</span></pre>
+<p>MySQL hides the schema layer; Snowflake makes it a real object — and we exploited
+that: our bronze/silver/gold layers are schemas, so the layers are visible structure,
+not naming conventions. (Every database also ships with <code>INFORMATION_SCHEMA</code>
+and a default empty <code>PUBLIC</code> — ignore both.)</p>
+
+<div class="box">
+<h4>Two names, one account</h4>
+<p>Our login URL is <code>VZJVHYS-IC67204.snowflakecomputing.com</code> (the
+"org-account" name, used in configs), but <code>SELECT CURRENT_ACCOUNT()</code> returns
+<code>WM80161</code> (the internal "locator"). Both point at the same account — a
+five-minute confusion worth knowing about in advance.</p>
+</div>
+
+<h3>4.2 Warehouse vs database — the real difference</h3>
+<table>
+  <tr><th></th><th>MySQL (database)</th><th>Snowflake (warehouse)</th></tr>
+  <tr><td>Built for</td><td>Apps: many small reads/writes of single rows</td><td>Analytics: sums and joins over millions of rows</td></tr>
+  <tr><td>Storage layout</td><td>Rows together (grab one row fast)</td><td><b>Columns together</b> (sum one column without touching others)</td></tr>
+  <tr><td>Compute</td><td>The same server that stores the data</td><td>Separate rented clusters ("virtual warehouses")</td></tr>
+  <tr><td>Scaling</td><td>Bigger box</td><td>Pick a size (XS→6XL, each ≈ 2× the last) or add a second one</td></tr>
+  <tr><td>Billing</td><td>Server runs 24/7</td><td>Credits burned <b>only while the warehouse runs</b></td></tr>
+</table>
+
+<h3>4.3 The rented kitchen — storage/compute separation</h3>
+<p>The single most important Snowflake idea. Your data sits in cheap cloud storage (the
+fridge — always there, billed by GB). Queries run on a <b>virtual warehouse</b> — a
+cluster of machines you rent by the <b>second</b> (the kitchen). Even
+<code>SELECT 1</code> briefly wakes an XS warehouse. Stop querying for 60 seconds and
+<b>auto-suspend</b> switches it off — billing stops. Next query auto-resumes it (you
+feel this as a few seconds of cold start). Interview line: <i>"storage-compute
+separation means I scale and pay for compute independently — my XS auto-suspends when
+idle."</i></p>
+
+<h3>4.4 Cost governance — what we set and why</h3>
+<pre>ALTER WAREHOUSE COMPUTE_WH SET
+    AUTO_SUSPEND = 60                    <span class="c"># sleep after 60 idle seconds</span>
+    AUTO_RESUME  = TRUE                  <span class="c"># wake on next query</span>
+    STATEMENT_TIMEOUT_IN_SECONDS = 600   <span class="c"># kill any query older than 10 min</span></pre>
+<p>The trial gives $400 of credits. A few small queries a day would never exhaust them —
+but an idle warehouse that never sleeps, or one runaway query, could. This ALTER (added
+to <code>setup_snowflake.py</code>, so it's reproducible from the repo) makes bleeding
+credits <i>structurally impossible</i>. This is what "governance" means in practice:
+not hoping, configuring.</p>
+</div>
+
+<!-- ================= CH5 ================= -->
+<div class="page">
+<h2>5 · dbt — the transformation layer, properly this time</h2>
+
+<h3>5.1 What a dbt project actually is</h3>
+<p>Expectations of a big framework; reality: <b>one YAML file plus SQL files</b>.
+<code>dbt_project.yml</code> names the project, points to a connection profile, and sets
+per-folder defaults. Every <code>.sql</code> file under <code>models/</code> is a
+<b>model</b> — a single SELECT that dbt turns into a view or table. That's the whole
+magic. Ours:</p>
+<pre>models:
+  crypto_elt:
+    staging:
+      +materialized: view     <span class="c"># cleaning layer: zero copied data</span>
+      +schema: staging
+    marts:
+      +materialized: table    <span class="c"># presentation layer: physically built</span>
+      +schema: marts</pre>
+
+<h3>5.2 profiles.yml — secrets without secrets</h3>
+<pre>crypto_elt:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user:     "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"   <span class="c"># read from env, never stored</span>
+      warehouse: COMPUTE_WH
+      database: CRYPTO_DB</pre>
+<p><code>env_var()</code> means the file contains <i>zero</i> credentials — it can be
+committed, and the same file works later on GitHub Actions, which injects the same
+variables from its vault. Locally the values come from <code>.env</code> (git-ignored).</p>
+
+<h3>5.3 sources vs ref — how the dependency map is born</h3>
+<pre><span class="c"># sources.yml — tables Python built; dbt only points at them</span>
+sources:
+  - name: coingecko
+    database: CRYPTO_DB
+    schema: RAW
+    tables:
+      - name: coins_markets
+      - name: coin_market_chart</pre>
+<p>In a model: <code>{{ source('coingecko', 'coins_markets') }}</code> = "read the raw
+table dbt didn't build". <code>{{ ref('stg_coins') }}</code> = "read another model dbt
+<i>did</i> build — and build it before me". dbt collects every ref into the <b>DAG</b>
+(directed acyclic graph — a to-do list that can never loop). When we run
+<code>dbt build</code>, dbt itself figures out: sources → staging → tests → marts →
+tests. Nobody tells it the order.</p>
+
+<h3>5.4 Staging model 1 — stg_coins, block by block</h3>
+<pre>with source as (
+    select * from {{ source('coingecko', 'coins_markets') }}
+),
+deduped as (
+    select *,
+        row_number() over (
+            partition by id                  <span class="c"># one group per coin</span>
+            order by loaded_at desc          <span class="c"># newest load first</span>
+        ) as rn
+    from source
+)
+select
+    id              as coin_id,              <span class="c"># ← renaming happens HERE, not in RAW</span>
+    upper(symbol)   as symbol,
+    name            as coin_name,
+    current_price, market_cap, market_cap_rank, total_volume,
+    ...
+    try_to_timestamp_tz(ath_date) as ath_date,   <span class="c"># string → real timestamp HERE</span>
+    try_to_timestamp_tz(last_updated) as source_last_updated,
+    loaded_at
+from deduped
+where rn = 1                               <span class="c"># keep only the newest row per coin</span></pre>
+<p><b>The dedupe, walked through with our real duplicate.</b> RAW contained two bitcoin
+rows (two pipeline runs):</p>
+<table>
+  <tr><th>id</th><th>current_price</th><th>loaded_at</th><th>rn</th></tr>
+  <tr><td>bitcoin</td><td>82,512</td><td>09:14 (later run)</td><td><b>1</b> ← kept</td></tr>
+  <tr><td>bitcoin</td><td>82,489</td><td>07:28 (earlier run)</td><td>2 ← dropped</td></tr>
+</table>
+<p><code>row_number()</code> numbers rows inside each coin-group, newest first;
+<code>where rn = 1</code> keeps one. Ethereum's 2 rows become 1, all 50 coins the same.
+That's "latest load wins" — the payoff of append-only RAW. And
+<code>try_to_timestamp_tz</code> converts the ISO string to a real timestamp, returning
+NULL instead of crashing on a malformed value — defensive by design.</p>
+
+<h3>5.5 Staging model 2 — stg_market_chart, different grain</h3>
+<p>Same pattern, one difference that matters: the <b>partition</b> is
+<code>(coin_id, price_date)</code> — one row per coin <i>per day</i>, not per coin.
+Remember the "91 points but 90 days" quirk? The live "now" point shares today's date
+with today's daily point; both arrive as separate RAW rows; this dedupe collapses them.
+Nothing was lost — the grain rule did exactly its job.</p>
+
+<div class="box idea">
+<h4>Grain — say it out loud before writing any model</h4>
+<p><b>Grain</b> = "what does ONE row in this table mean?" stg_coins: one row per coin.
+stg_market_chart: one row per coin per day. Deciding this first makes every dedupe,
+join and test obvious. In interviews, answering "what's your grain?" crisply signals
+real modeling experience.</p>
+</div>
+
+<h3>5.6 Materializations — view vs table</h3>
+<p>A <b>view</b> is a saved query: a window over the source, copies nothing, always
+fresh, costs nothing to store. A <b>table</b> is a photo: physically built once, fast to
+query, frozen until rebuilt. We made staging = views (cleaning logic should always
+reflect RAW as-is) and marts = tables (stable and fast for the dashboard).</p>
+
+<div class="box">
+<h4>Small gotcha we dodged: schema naming</h4>
+<p>With folder config <code>+schema: staging</code>, dbt's default names the schema
+<code>&lt;target&gt;_staging</code> → "STAGING_STAGING". A tiny override macro
+(<code>macros/generate_schema_name.sql</code>, 6 lines) makes custom names pass through
+exactly as written — clean STAGING and MARTS.</p>
+</div>
+</div>
+
+<!-- ================= CH6 ================= -->
+<div class="page">
+<h2>6 · The star schema — the warehouse's finished product</h2>
+
+<h3>6.1 Fact vs dimension, in one picture</h3>
+<p>One <b>big</b> table of numbers (the <b>fact</b>), small tables of descriptions
+(<b>dimensions</b>) around it, joined by IDs — draw the lines and it looks like a star ✳.
+The school-register analogy: the big sheet says "roll 14, present"; the small sheet says
+"roll 14 = Vineet". You never write the full name 500 times.</p>
+
+<table>
+  <tr><th>Table</th><th>Type</th><th>Grain (one row = …)</th><th>Columns</th></tr>
+  <tr><td>fact_market_snapshots</td><td>fact</td><td>one coin, one day</td><td>coin_id, price_date, price, market_cap, total_volume</td></tr>
+  <tr><td>dim_coins</td><td>dimension</td><td>one coin</td><td>coin_id, symbol, name, rank, supply, ATH/ATL + dates</td></tr>
+  <tr><td>dim_date</td><td>dimension</td><td>one calendar day</td><td>date_day, day_name, day_of_week, month_name</td></tr>
+</table>
+
+<p><b>Real sample rows</b> (from the actual build):</p>
+<table>
+  <tr><th>coin_id</th><th>price_date</th><th>price</th><th>market_cap</th><th>total_volume</th></tr>
+  <tr><td>bitcoin</td><td>2026-10-11</td><td>82,512</td><td>1.65 T</td><td>39.8 B</td></tr>
+  <tr><td>ethereum</td><td>2026-10-11</td><td>2,502</td><td>301 B</td><td>15.2 B</td></tr>
+  <tr><td>bitcoin</td><td>2026-10-10</td><td>81,940</td><td>1.64 T</td><td>41.1 B</td></tr>
+</table>
+
+<h3>6.2 Why not one big flat table?</h3>
+<p>Tempting: one table with coin name, symbol, rank, day name repeated on every row.
+Costs: (1) storage bloat — "Bitcoin" written 90 times per coin; (2) drift — fix a typo
+in one place, miss 89; (3) slow filters — text filters instead of integer joins. The
+star keeps descriptions written once and joins them by ID. This trade-off is called
+<b>normalization for dimensions</b>, and it's the heart of dimensional modeling.</p>
+
+<h3>6.3 dim_date — the dimension that earns its keep</h3>
+<pre>with dates as (
+    select distinct price_date as date_day
+    from {{ ref('stg_market_chart') }}      <span class="c"># whatever days exist in the data</span>
+)
+select date_day,
+       dayname(date_day)         as day_name,     <span class="c"># 'Saturday'</span>
+       dayofweek(date_day)       as day_of_week,
+       monthname(date_day)       as month_name
+from dates</pre>
+<p>A date like <code>2026-10-11</code> knows its number, not its meaning. dim_date
+attaches the meaning — and it <b>grows itself</b>: when new days arrive in the data,
+new dim_date rows appear automatically (90 → 92 rows during the build, zero changes
+needed).</p>
+
+<h3>6.4 The payoff query — weekday effect, line by line</h3>
+<pre>WITH daily AS (
+    SELECT price_date, price,
+           100.0 * (price - LAG(price) OVER (ORDER BY price_date))
+                 / LAG(price) OVER (ORDER BY price_date) AS day_change_pct
+    FROM fact_market_snapshots
+    WHERE coin_id = 'bitcoin'
+)
+SELECT d.day_name,
+       ROUND(AVG(daily.price), 0)        AS avg_price,
+       ROUND(AVG(daily.day_change_pct), 2) AS avg_change
+FROM daily
+JOIN dim_date d ON daily.price_date = d.date_day
+GROUP BY d.day_name</pre>
+<ul>
+  <li><code>LAG(price)</code> = "the previous row's price" — so <code>day_change_pct</code>
+  is yesterday→today % move. One window function replaces a self-join.</li>
+  <li><code>JOIN dim_date</code> is the whole point: it's what makes "Saturday" a
+  groupable thing. Without dim_date this query is impossible — a raw date can't tell
+  you its weekday.</li>
+  <li>Result on our real data: Friday averaged <b>+0.58%</b> moves, Wednesday
+  <b>+0.05%</b> — Friday was ~11× livelier than Wednesday in this window.</li>
+</ul>
+</div>
+
+<!-- ================= CH7 ================= -->
+<div class="page">
+<h2>7 · Testing — the 15 guards</h2>
+
+<h3>7.1 The idea: tests hunt for bad rows</h3>
+<p>A dbt test is a SELECT whose job is to find rows that <i>should not exist</i>. Zero
+rows returned = pass. Any rows = the build fails loudly, in red, before bad numbers ever
+reach a dashboard. Tests run on every <code>dbt build</code> — ours run nightly on
+GitHub, so a data problem is caught within hours, automatically.</p>
+
+<h3>7.2 Generic tests — one line each</h3>
+<pre>columns:
+  - name: coin_id
+    data_tests:
+      - not_null                 <span class="c"># any row where coin_id is empty? fail</span>
+      - unique                   <span class="c"># same coin twice in a dimension? fail</span>
+      - relationships:           <span class="c"># a fact row pointing at a coin that</span>
+          arguments:             <span class="c"># doesn't exist in dim_coins? fail</span>
+            to: ref('dim_coins')
+            field: coin_id</pre>
+<p>Applied across staging + marts: not-null on every key, unique coin IDs, unique dates,
+relationships from the fact to <i>both</i> dimensions. Think of
+<code>relationships</code> as referential integrity for analytics — the "broken link"
+detector.</p>
+
+<h3>7.3 Custom tests — just SQL files with an opinion</h3>
+<pre><span class="c"># tests/assert_prices_are_positive.sql</span>
+select * from {{ ref('fact_market_snapshots') }}
+where price is null or price <= 0        <span class="c"># finds bad rows; empty = pass</span></pre>
+<pre><span class="c"># tests/assert_no_duplicate_fact_rows.sql</span>
+select coin_id, price_date, count(*)
+from {{ ref('fact_market_snapshots') }}
+group by 1, 2
+having count(*) > 1                      <span class="c"># any coin-day appearing twice? fail</span></pre>
+<p>Why "price &gt; 0" matters: a zero/negative price can only mean broken source data —
+and it would poison every average downstream. Cheap to check, expensive to miss.</p>
+
+<h3>7.4 The full scoreboard</h3>
+<table>
+  <tr><th>Check</th><th>Count</th><th>Catches</th></tr>
+  <tr><td>not_null (keys, dates, prices)</td><td>7</td><td>rows that lost their identity in loading</td></tr>
+  <tr><td>unique (coin IDs, calendar days)</td><td>3</td><td>sneaky dimension duplicates</td></tr>
+  <tr><td>relationships (fact → both dims)</td><td>2</td><td>facts joined to nothing</td></tr>
+  <tr><td>custom: no duplicate coin-days</td><td>1</td><td>double-loads reaching the marts</td></tr>
+  <tr><td>custom: prices positive</td><td>1</td><td>garbage values</td></tr>
+  <tr><td>staging-level key checks</td><td>1</td><td>dedupe bugs early in the chain</td></tr>
+</table>
+<div class="box ok">
+<h4>How the quirks from Chapter 2 got absorbed</h4>
+<p><code>figure-heloc</code>'s missing 9 days? Not a test failure — fewer rows per coin
+is valid; only <i>duplicate</i> or <i>null</i> rows fail. The doubled "now" point?
+Collapsed by the staging grain before tests ever ran. Good tests check invariants
+("what must always be true"), not exact counts ("how many rows I expect today") —
+exact-count tests break every time data grows.</p>
+</div>
+</div>
+
+<!-- ================= CH8 ================= -->
+<div class="page">
+<h2>8 · Orchestration — GitHub Actions, the robot that runs everything</h2>
+
+<h3>8.1 The recipe file</h3>
+<p>A workflow is one YAML file in the repo (<code>.github/workflows/daily-pipeline.yml</code>)
+that says: <i>when</i> to run and <i>what</i> to do. When triggered, GitHub rents us a
+fresh Ubuntu computer, checks out our code, and follows the steps:</p>
+<pre>on:
+  schedule:
+    - cron: "13 1 * * *"      <span class="c"># m h dom mon dow — 01:13 UTC daily = 06:43 IST</span>
+  workflow_dispatch: {}        <span class="c"># + a manual "Run workflow" button</span>
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    env:                       <span class="c"># secrets injected here, invisible in logs</span>
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4            <span class="c"># get the code</span>
+      - uses: actions/setup-python@v5        <span class="c"># python 3.12</span>
+      - run: pip install requests python-dotenv snowflake-connector-python dbt-snowflake
+      - run: python pipelines/extract_load.py        <span class="c"># 1 fetch + load</span>
+      - run: dbt build                               <span class="c"># 2 clean + marts + 15 tests</span>
+      - run: python pipelines/export_dashboard_data.py  <span class="c"># 3 export JSON</span>
+      - run: |                               <span class="c"># 4 commit fresh data as "pipeline-bot"</span>
+          git add dashboard/data
+          git commit -m "data: refresh $(date -u +%F)"
+          git push</pre>
+
+<h3>8.2 Secrets — the vault habit</h3>
+<p>Credentials live in exactly two places: local <code>.env</code> (git-ignored, never
+committed — verified with <code>git ls-files</code> before the repo went public) and
+GitHub's encrypted <b>Secrets vault</b> (repo Settings → Secrets), which pastes values
+into the runner as environment variables at runtime — visible to the code, never
+printed in logs, never in the repo.</p>
+
+<div class="box warn">
+<h4>Problem 5 — the morning the cron didn't come</h4>
+<p>Oct 12, ~07:00 IST: the dashboard still said "as of Oct 11". The Actions history
+showed <b>no scheduled run at all</b> — only our manual runs. Nothing was broken:
+GitHub cron is <b>best-effort</b> and skips/delays under platform load. Fixes: ran the
+pipeline manually (idempotent, so a late run loses nothing — it just fetches the
+latest data), moved the cron off the crowded <code>:05</code> minute to
+<code>01:13 UTC</code>, and kept the manual button as the always-available fallback.
+Production answer to this problem: an orchestrator with SLA monitoring and alerts.</p>
+</div>
+
+<div class="box warn">
+<h4>Problem 6 — my own YAML bug, found the same morning</h4>
+<p>The deploy step used <code>if: ${{ secrets.X != '' }}</code> — but GitHub
+<b>forbids the secrets context inside step-level if conditions</b>. The workflow file
+failed to parse ("Unrecognized named-value: 'secrets'"), which would have silently
+killed <i>every</i> future run, cron included. The standard fix: expose the secret in
+the <b>job-level env</b> (allowed), and test <code>env.X != ''</code> in the step.
+Classic gotcha, now burned into memory.</p>
+</div>
+
+<h3>8.3 What Airflow would add (the interview upgrade path)</h3>
+<p>GitHub Actions is orchestration-lite: one schedule, sequential steps, a web page of
+run history. <b>Airflow</b> is the industrial version: per-task retries with policies,
+<i>backfills</i> (rerun the past 30 days after a bug fix), <i>sensors</i> (wait until
+source data exists), SLA alerts, a graph UI of every DAG run. Our pipeline maps 1:1 —
+each workflow step becomes an Airflow task. That's the stated next step for this
+project, and it's a great interview line.</p>
+</div>
+
+<!-- ================= CH9 ================= -->
+<h2>9 · Serving — from warehouse to live dashboard, for free</h2>
+
+<h3>9.1 The problem with "dashboard queries the database"</h3>
+<p>Two issues: (1) credentials would have to live <i>in the browser</i> — anyone could
+steal them; (2) every visitor costs warehouse compute. Portfolio sites get crawled,
+shared, opened by recruiters at 2 AM — live queries are the wrong shape.</p>
+
+<h3>9.2 Our shape: export once, serve statically</h3>
+<p>The nightly pipeline's export step (<code>export_dashboard_data.py</code>) runs a
+handful of SELECTs against staging + marts and writes four small files —
+<code>overview.json</code>, <code>history.json</code>, <code>top_coins.json</code>,
+<code>weekday.json</code>. The workflow commits them (that's the nightly
+<code>data: refresh</code> commit — the repo's history doubles as a visible data
+trail), and the site deploys to Netlify's <b>CDN</b> — a worldwide network of servers
+that hand out static files fast and free.</p>
+<div class="box ok">
+<h4>The beautiful property</h4>
+<p><b>Visitors never touch Snowflake.</b> No credentials in the browser, no per-visit
+cost, page loads in milliseconds from the nearest CDN node. The warehouse does its few
+seconds of work once per day, then sleeps. Freshness = daily — exactly the cadence the
+pipeline runs at, so nothing is lost.</p>
+</div>
+
+<h3>9.3 The dashboard itself</h3>
+<p>A single static page (no framework) with the <b>ECharts</b> chart library: KPI tiles
+with count-up animation, a 90-day price chart with a coin selector, a measure toggle
+(price / market cap / volume), an "indexed to 100" scale, top-10 bars, the weekday-effect
+chart with its own coin selector, and a sortable top-20 table — plus the documentation
+page. All data comes from those four JSON files.</p>
+
+<!-- ================= CH10 ================= -->
+<div class="page">
+<h2>10 · Chart sense — three rules we followed (and why they matter)</h2>
+
+<h3>10.1 Never two y-axes on one chart</h3>
+<p>Bitcoin ≈ $82,000; a small coin ≈ $2.50. Plot both on one dollar axis and the small
+coin is a flat line at the floor. The dishonest shortcut is a second y-axis — but the
+two scales' alignment is arbitrary, so the chart quietly invents correlations that
+don't exist. The honest fix is <b>indexing</b>:</p>
+<table>
+  <tr><th></th><th>Day 1</th><th>Day 90</th><th>Raw change</th><th>Indexed (Day 1 = 100)</th></tr>
+  <tr><td>Bitcoin</td><td>$80,000</td><td>$84,000</td><td>+5%</td><td>100 → <b>105</b></td></tr>
+  <tr><td>Small coin</td><td>$2.50</td><td>$3.50</td><td>+40%</td><td>100 → <b>140</b></td></tr>
+</table>
+<p>Rebase every series to 100 at the window start and growth becomes comparable on
+<b>one</b> axis. Our dashboard's "Indexed to 100" toggle does exactly this.</p>
+
+<h3>10.2 Validate colors — don't eyeball them</h3>
+<p>About 8% of men see color differently; a red/green pair can be identical to them.
+Before shipping we ran the chart palette through a colorblind-safety validator script —
+it flagged the worst pair as "floor band" (borderline), which is legal only with backup
+encoding. So the dashboard ships: legend chips with color dots, tooltips that name
+every series, and a full table view — identity never rides on color alone.</p>
+
+<h3>10.3 Every chart gets a table</h3>
+<p>Tooltips are enhancement, not gatekeeping: any value visible on hover is also
+visible in the sortable table — including to screen readers and anyone who just prefers
+numbers. Small discipline, big credibility.</p>
+
+<div class="box idea">
+<h4>Problem 7 — the buttons that did nothing</h4>
+<p>Dashboard v1 shipped range buttons (7D/30D/90D) and a USD/Indexed toggle that
+<i>looked</i> clickable but had no event listeners — decorative. Found during the v2
+upgrade and fixed with a proper <code>wireControls()</code> function. Lesson that
+survives any tech stack: <b>click your own controls before shipping.</b></p>
+</div>
+
+<!-- ================= CH11 ================= -->
+<div class="page">
+<h2>11 · Interview rehearsal</h2>
+
+<div class="qa"><b>Q: Walk me through your pipeline.</b><br>
+CoinGecko's free API → Python extracts and loads raw into Snowflake (append-only,
+<code>loaded_at</code>-stamped) → dbt rebuilds staging (latest-load-wins dedupe, rename,
+cast) and a marts star schema (fact = one row per coin per day; coin + calendar
+dimensions) → 15 tests gate every build → GitHub Actions runs it nightly, exports JSON,
+commits it, and deploys the dashboard to Netlify. Fully autonomous — the repo shows a
+data-refresh commit every morning.</div>
+
+<div class="qa"><b>Q: Why ELT over ETL?</b><br>
+Raw data is preserved — a wrong transform costs a re-run, not the data. And modern
+warehouses make in-warehouse SQL cheap. I've built both patterns: my stock-market
+project is PySpark ETL into MySQL; this one is Snowflake/dbt ELT.</div>
+
+<div class="qa"><b>Q: How do you handle duplicates?</b><br>
+Duplicates across loads are <i>expected</i> — RAW is append-only by design. Staging
+dedupes with <code>row_number() over (partition by id[, date] order by loaded_at desc)</code>
+keeping rn = 1: latest load wins. A custom test also fails the build if a duplicate
+ever reaches the fact table.</div>
+
+<div class="qa"><b>Q: What's your fact table's grain?</b><br>
+One row per coin per calendar date. Deciding that up front fixed the dedupe key, the
+uniqueness tests, and even absorbed the API's quirk of sending 91 points for 90 days
+(the live "now" point shares today's date and collapses).</div>
+
+<div class="qa"><b>Q: Explain Snowflake's architecture in one breath.</b><br>
+Storage and compute are separate: data in cheap columnar storage; queries on virtual
+warehouses rented per second. Mine is XS, auto-suspends after 60 idle seconds,
+auto-resumes, statements time out at 600s — cost governed by configuration, not hope.</div>
+
+<div class="qa"><b>Q: What does dbt give you over plain SQL scripts?</b><br>
+Version-controlled models with automatic dependency ordering (refs build the DAG),
+testing baked into every run, generated docs and lineage. Software-engineering practice
+— modularity, CI, documentation — applied to SQL.</div>
+
+<div class="qa"><b>Q: A test failed at 3 AM. What happens?</b><br>
+The run goes red and stops after that model's tests — marts don't rebuild with bad
+data, the dashboard keeps yesterday's (valid) JSON, and the Actions history shows which
+check failed. Because RAW is append-only, the fix is: correct the model or wait for the
+source to behave, re-run — no cleanup needed.</div>
+
+<div class="qa"><b>Q: The API rate-limits you. Then what?</b><br>
+Happened in the first run — a 429 mid-history. The loader retries with backoff,
+honouring the server's Retry-After header, up to five times, with a polite pause
+between calls. It survived a real 429 and still finished green.</div>
+
+<div class="qa"><b>Q: How are credentials handled?</b><br>
+.env locally (git-ignored — verified via git ls-files before going public), GitHub
+Secrets for CI (injected as env vars), <code>env_var()</code> in dbt's profile so the
+config file itself is committable, revocable tokens for deploys. Anything pasted
+anywhere is rotated — we rotated the Snowflake password during the build as practice.</div>
+
+<div class="qa"><b>Q: How does the dashboard get data?</b><br>
+The nightly run exports four small JSONs and deploys them with the static site to a
+CDN. Visitors read static files — no warehouse connection, no credentials in the
+browser, zero per-visit cost.</div>
+
+<div class="qa"><b>Q: What broke during the build?</b><br>
+Six real things: an <code>invalid identifier</code> from renaming a column in RAW (fix:
+rename in staging, not RAW); a 429 rate-limit (fix: retry with backoff); a coin with
+81 of 90 days (absorbed by schema design); GitHub cron skipping a morning (manual run +
+moved schedule + idempotency means nothing lost); <code>secrets</code> in a step-if
+which broke workflow parsing (fix: job-level env); and dashboard buttons without
+listeners (fix: click your own controls).</div>
+
+<div class="qa"><b>Q: What's next for this project?</b><br>
+Airflow instead of cron-style Actions (retries, backfills, sensors, SLA alerts);
+incremental fact builds instead of full refresh; dbt snapshots if coin attributes
+start changing (SCD); more coins behind a proper rate-limit budget; alerts when a run
+misses its window.</div>
+
+<!-- ================= CH12 ================= -->
+<div class="page">
+<h2>12 · Repo map — every file, one line each</h2>
+<table>
+  <tr><th>Path</th><th>What it is</th></tr>
+  <tr><td><code>pipelines/extract_load.py</code></td><td>Fetch CoinGecko (retries + backoff), land raw in Snowflake</td></tr>
+  <tr><td><code>pipelines/setup_snowflake.py</code></td><td>Idempotent DDL: database, 3 schemas, warehouse governance</td></tr>
+  <tr><td><code>pipelines/export_dashboard_data.py</code></td><td>Marts → four dashboard JSON files</td></tr>
+  <tr><td><code>pipelines/test_connection.py</code></td><td>Tiny sanity check: can Python reach Snowflake?</td></tr>
+  <tr><td><code>dbt/dbt_project.yml</code></td><td>Project name, profile, per-folder materializations</td></tr>
+  <tr><td><code>dbt/profiles.yml</code></td><td>Connection via env vars — no secrets inside</td></tr>
+  <tr><td><code>dbt/models/staging/sources.yml</code></td><td>Declares the two RAW tables as dbt sources</td></tr>
+  <tr><td><code>dbt/models/staging/stg_coins.sql</code></td><td>Snapshot cleaner: dedupe, rename, cast</td></tr>
+  <tr><td><code>dbt/models/staging/stg_market_chart.sql</code></td><td>History cleaner: one row per coin per day</td></tr>
+  <tr><td><code>dbt/models/marts/dim_coins.sql</code></td><td>Coin descriptions, one row per coin</td></tr>
+  <tr><td><code>dbt/models/marts/dim_date.sql</code></td><td>Self-growing calendar dimension</td></tr>
+  <tr><td><code>dbt/models/marts/fact_market_snapshots.sql</code></td><td>Daily numbers: price, cap, volume</td></tr>
+  <tr><td><code>dbt/models/*/schema.yml</code></td><td>Generic tests (not_null, unique, relationships)</td></tr>
+  <tr><td><code>dbt/tests/*.sql</code></td><td>Custom tests: no duplicate facts, positive prices</td></tr>
+  <tr><td><code>dbt/macros/generate_schema_name.sql</code></td><td>Pass-through schema naming (no STAGING_STAGING)</td></tr>
+  <tr><td><code>.github/workflows/daily-pipeline.yml</code></td><td>The nightly recipe: run everything, commit data, deploy</td></tr>
+  <tr><td><code>dashboard/</code></td><td>Static site: index.html, docs.html, assets, data/*.json</td></tr>
+  <tr><td><code>Docs/</code></td><td>This document + its HTML source</td></tr>
+</table>
+
+<h2>Receipts</h2>
+<table>
+  <tr><th>Fact</th><th>Value</th></tr>
+  <tr><td>Fact rows</td><td>919 and growing daily (10 coins × up to 90 days)</td></tr>
+  <tr><td>Dimensions</td><td>dim_coins 50 rows · dim_date grows itself (90 → 92 during build)</td></tr>
+  <tr><td>Tests</td><td>15, all passing, every night</td></tr>
+  <tr><td>Schedule</td><td>01:13 UTC = 06:43 IST daily + manual button</td></tr>
+  <tr><td>Infrastructure cost</td><td>$0 — Snowflake trial, free Actions minutes, free Netlify, free API</td></tr>
+  <tr><td>Build time</td><td>3 days (of a 16-day plan)</td></tr>
+</table>
+
+<h2>Reproduce it</h2>
+<pre>git clone https://github.com/vinn27/crypto-market-elt
+<span class="c"># free Snowflake trial (email only) → copy .env.example to .env and fill it</span>
+python pipelines/setup_snowflake.py          <span class="c"># database, schemas, warehouse governance</span>
+python pipelines/extract_load.py             <span class="c"># fetch + land raw</span>
+cd dbt &amp;&amp; dbt build                         <span class="c"># transform + 15 tests</span>
+python pipelines/export_dashboard_data.py    <span class="c"># dashboard JSON</span></pre>
+
+<p class="footer-note">
+Study companion for github.com/vinn27/crypto-market-elt · written 12 Oct 2026 ·
+dashboard: crypto-market-elt.netlify.app · docs: crypto-market-elt.netlify.app/docs.html
+</p>
+
+</body>
+</html>

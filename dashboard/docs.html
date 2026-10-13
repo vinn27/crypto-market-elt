@@ -148,7 +148,7 @@
     <table class="spec">
       <tr><th>Zone</th><th>What it shows</th><th>Reads from</th></tr>
       <tr><td>KPI tiles</td><td>Bitcoin &amp; Ethereum prices with 24h change, total market cap, biggest mover</td><td>staging snapshot</td></tr>
-      <tr><td>Price history</td><td>90 days of daily closes, up to 4 coins; USD view or rebased “indexed to 100” view</td><td>fact table</td></tr>
+      <tr><td>Price history</td><td>A full year of daily closes (7/30/90-day presets), up to 4 coins; USD or rebased “indexed to 100” view</td><td>fact table</td></tr>
       <tr><td>Top 10 by cap</td><td>Market-cap ranking, latest snapshot</td><td>staging snapshot</td></tr>
       <tr><td>Weekday pattern</td><td>Bitcoin's average day-over-day move per weekday</td><td>fact ⟕ dim_date</td></tr>
       <tr><td>Snapshot table</td><td>Top 20 coins, sortable and filterable — the table view behind the charts</td><td>staging snapshot</td></tr>
@@ -168,7 +168,7 @@
     <table class="spec">
       <tr><th>Endpoint</th><th>Gives</th><th>Lands in</th></tr>
       <tr><td><code>/coins/markets</code></td><td>Top-50 snapshot: prices, market cap, volume, 24h change, supply</td><td><code>RAW.COINS_MARKETS</code></td></tr>
-      <tr><td><code>/coins/{id}/market_chart</code></td><td>90 days of daily price / cap / volume for the top 10 coins</td><td><code>RAW.COIN_MARKET_CHART</code></td></tr>
+      <tr><td><code>/coins/{id}/market_chart</code></td><td>A full year of daily price / cap / volume for the top 10 coins</td><td><code>RAW.COIN_MARKET_CHART</code></td></tr>
     </table>
     <p>Raw rows are landed <b>exactly as received</b> — no renaming, no cleaning,
        timestamps kept as strings. Every load is stamped with
@@ -258,7 +258,7 @@
 
   <!-- ======================= 5 ======================= -->
   <section class="doc-section" id="quality">
-    <h2><span class="num">05</span> Data quality — 15 checks, every night</h2>
+    <h2><span class="num">05</span> Data quality — 16 checks, every night</h2>
     <p>Every pipeline run ends with dbt tests. A test is a SELECT that hunts for
        <i>bad rows</i> — zero rows found means pass; anything else fails the run loudly.</p>
     <table class="spec">
@@ -268,10 +268,11 @@
       <tr><td><code>relationships</code> fact → dims</td><td>facts pointing at coins/dates that don't exist</td></tr>
       <tr><td>no duplicate fact rows</td><td>the same coin-day loaded twice</td></tr>
       <tr><td>prices are positive</td><td>broken source data (zero / negative prices)</td></tr>
+      <tr><td>data is fresh (&lt; 2 days old)</td><td>a silently stalled or skipped pipeline run</td></tr>
     </table>
     <p>The pipeline also <b>defends itself at the edges</b>: API rate-limits get
        retry-with-backoff (honouring <code>Retry-After</code>), and one tracked
-       coin is newer than 90 days, so it simply arrives with fewer days — the
+       coin is younger than a year, so it simply arrives with fewer days — the
        schema absorbs it instead of breaking.</p>
   </section>
 
@@ -288,7 +289,7 @@
       <div class="pipe-stat"><div class="k">Schedule</div><div class="v">06:35 IST daily</div></div>
       <div class="pipe-stat"><div class="k">Fact rows</div><div class="v" id="pipeFact">—</div></div>
       <div class="pipe-stat"><div class="k">Calendar days</div><div class="v" id="pipeDates">—</div></div>
-      <div class="pipe-stat"><div class="k">Quality checks</div><div class="v ok">15 / 15 passing</div></div>
+      <div class="pipe-stat"><div class="k">Quality checks</div><div class="v ok">16 / 16 passing</div></div>
       <div class="pipe-stat"><div class="k">Orchestrator</div><div class="v">GitHub Actions</div></div>
       <div class="pipe-stat"><div class="k">Last data</div><div class="v" id="pipeAsOf">—</div></div>
     </div>

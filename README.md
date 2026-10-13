@@ -8,7 +8,7 @@
 
 Every morning at 06:35 IST this pipeline, unattended: fetches crypto market
 data from the CoinGecko API → lands it **raw** in **Snowflake** → rebuilds a
-tested **star schema** with **dbt** (15 quality checks) → exports JSON →
+tested **star schema** with **dbt** (16 quality checks) → exports JSON →
 **deploys the dashboard** to Netlify's CDN.
 
 > Deliberately **ELT** — load raw first, transform in-warehouse with SQL under
@@ -32,17 +32,17 @@ CoinGecko API ──▶ Python extract ──▶ Snowflake ──▶ dbt ──�
                                                     └─────────────┘
         ▲                                                        │
         └──────────── GitHub Actions, daily 06:35 IST ───────────┘
-         (extract → load → dbt build + 15 tests → export → commit → deploy)
+         (extract → load → dbt build + 16 tests → export → commit → deploy)
 ```
 
 ## Pipeline stages
 
 | Stage | Tool | What happens |
 |---|---|---|
-| Extract | Python · `requests` | Top-50 snapshot + 90-day daily history (top 10), retry with backoff honouring `Retry-After` |
+| Extract | Python · `requests` | Top-50 snapshot + 1-year daily history (top 10), retry with backoff honouring `Retry-After` |
 | Load | Python · `snowflake-connector` | Land raw rows as-is in `CRYPTO_DB.RAW` — append-only, stamped `loaded_at` |
 | Transform | dbt Core | Staging (dedupe latest-load-wins, rename, cast) → marts star schema |
-| Test | dbt tests | 15 checks: not-null, unique, relationships, no duplicate facts, positive prices |
+| Test | dbt tests | 16 checks: not-null, unique, relationships, no duplicate facts, positive prices, freshness guard |
 | Orchestrate | GitHub Actions | Daily cron on free public-repo minutes; `pipeline-bot` commits fresh data |
 | Publish | Netlify CLI | Dashboard + docs deployed to a global CDN; visitors never touch Snowflake |
 
@@ -84,7 +84,7 @@ Free Snowflake trial (email only, no card) → clone → fill `.env` from
 ```bash
 python pipelines/setup_snowflake.py     # database, schemas, warehouse governance
 python pipelines/extract_load.py        # fetch + land raw
-cd dbt && dbt build                     # transform + 15 tests
+cd dbt && dbt build                     # transform + 16 tests
 python pipelines/export_dashboard_data.py  # dashboard JSON
 ```
 

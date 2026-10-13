@@ -55,7 +55,13 @@ deploy step (needs NETLIFY_AUTH_TOKEN secret from user to go autonomous).
 
 **PENDING:** NETLIFY_AUTH_TOKEN from user (app.netlify.com/user/applications)
 → `gh secret set` → trigger workflow to verify the full auto chain. Then
-README final polish + interview story + optional dbt-docs page.
+interview story + optional dbt-docs page.
+
+**Oct 12:** `Docs/` folder added — `Crypto-ELT-Project-Walkthrough.pdf`
+(plain-language project walkthrough + every DE concept + interview Q&A;
+source `project-walkthrough.html`, rendered via headless Edge
+`--headless=new --print-to-pdf`). Kept local-only until user decides whether
+to publish study notes in the repo.
 
 ---
 

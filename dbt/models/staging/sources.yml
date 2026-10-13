@@ -13,4 +13,4 @@ sources:
       - name: coins_markets
         description: "Top-50 market snapshot, one batch per pipeline run (append-only)"
       - name: coin_market_chart
-        description: "Daily price/volume/market-cap history, top-10 coins, ~90 days (append-only)"
+        description: "Daily price/volume/market-cap history, top-10 coins, up to 1 year (append-only)"

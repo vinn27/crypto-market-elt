@@ -10,7 +10,7 @@ Reads:
   MARTS.DIM_DATE             calendar details
 Writes:
   dashboard/data/overview.json   KPI numbers + freshness
-  dashboard/data/history.json    90-day price series, top 8 coins
+  dashboard/data/history.json    1-year daily price series, top 8 coins
   dashboard/data/top_coins.json  top-20 snapshot table
   dashboard/data/weekday.json    bitcoin avg price + avg daily change by weekday
 """
@@ -91,7 +91,7 @@ def main():
         "dim_coins": dim_coins,
     }
 
-    # ---- 90-day history, top 8 coins (palette has 8 slots; never cycle) ----
+    # ---- 1-year history, top 8 coins (palette has 8 slots; never cycle) ----
     cur.execute("""
         SELECT s.coin_id, s.symbol, s.coin_name, s.market_cap_rank
         FROM STAGING.STG_COINS s

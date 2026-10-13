@@ -5,8 +5,8 @@ No cleaning, no business logic, no type casting beyond what is needed to
 unpack the API's structure. ALL transformation happens in dbt, in-warehouse.
 
 Sources (free public API, no key):
-  /coins/markets           top-50 snapshot          -> RAW.COINS_MARKETS
-  /coins/{id}/market_chart 90-day history, top-10   -> RAW.COIN_MARKET_CHART
+  /coins/markets           top-50 snapshot            -> RAW.COINS_MARKETS
+  /coins/{id}/market_chart 1-year history, top-10     -> RAW.COIN_MARKET_CHART
 
 RAW is append-only: every run adds rows stamped with loaded_at (Snowflake
 fills it via DEFAULT CURRENT_TIMESTAMP). dbt dedupes downstream, so re-running
@@ -22,8 +22,8 @@ from snowflake.connector import connect
 
 BASE_URL = "https://api.coingecko.com/api/v3"
 SNAPSHOT_COINS = 50      # top-N by market cap, daily snapshot
-HISTORY_COINS = 10       # top-N that also get 90 days of daily history
-HISTORY_DAYS = 90
+HISTORY_COINS = 10       # top-N that also get a full year of daily history
+HISTORY_DAYS = 365       # free tier allows up to 365 days (probed: 200 OK)
 CALL_PAUSE_SECONDS = 10  # free tier is rate-limited; stay polite
 MAX_RETRIES = 5
 

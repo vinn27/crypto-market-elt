@@ -1,0 +1,35 @@
+# The watchdog: runs AFTER the daily pipeline's window and fails loudly if
+# the pipeline hasn't succeeded recently. GitHub emails the repo owner on a
+# failed run — so a silently skipped cron (happened Oct 12) can never again
+# go unnoticed. Belt: this workflow. Suspenders: the dbt freshness test.
+
+name: Pipeline watchdog
+
+on:
+  schedule:
+    - cron: "37 3 * * *"   # 03:37 UTC = 09:07 IST, after the 06:43 run
+  workflow_dispatch:
+
+permissions:
+  actions: read
+
+jobs:
+  check-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if the daily pipeline hasn't succeeded within 26 hours
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          last=$(gh api "repos/vinn27/crypto-market-elt/actions/workflows/daily-pipeline.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].updated_at')
+          if [ -z "$last" ] || [ "$last" = "null" ]; then
+            echo "::error::No successful daily-pipeline run found at all"
+            exit 1
+          fi
+          echo "last successful daily run: $last"
+          age_hours=$(( ( $(date +%s) - $(date -u -d "$last" +%s) ) / 3600 ))
+          echo "age: ${age_hours}h (threshold 26h)"
+          if [ "$age_hours" -gt 26 ]; then
+            echo "::error::Daily pipeline is stale by ${age_hours}h — check the Actions tab"
+            exit 1
+          fi
