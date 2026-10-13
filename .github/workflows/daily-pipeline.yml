@@ -1,76 +1,17 @@
-# The daily recipe for GitHub's rented computer.
-# Runs: fetch crypto data -> load raw into Snowflake -> dbt build (clean + marts + tests)
-#
-# Triggers:
-#   schedule          every day 01:05 UTC = 6:35 AM India time
-#   workflow_dispatch the "Run workflow" button on GitHub (for manual testing)
+# The daily trigger. The actual steps live in run-pipeline.yml (reusable),
+# so the watchdog can run the exact same pipeline when the scheduler skips.
 
 name: Daily crypto ELT
 
 on:
   schedule:
-    - cron: "13 1 * * *"   # 01:13 UTC = 06:43 IST; off the busy :05 slot
+    - cron: "13 1 * * *"   # 01:13 UTC = 06:43 IST (GitHub cron is best-effort;
+                           # the watchdog self-heals any missed run at 09:07 IST)
   workflow_dispatch:
 
-# The data commit step needs write access to the repo.
-permissions:
-  contents: write
-
 jobs:
-  pipeline:
-    runs-on: ubuntu-latest
-
-    # Non-secret settings visible to every step; secrets come from GitHub's vault.
-    # NETLIFY_AUTH_TOKEN is exposed at job level because the `secrets` context
-    # is not allowed inside step-level `if` conditions.
-    env:
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_WAREHOUSE: COMPUTE_WH
-      SNOWFLAKE_DATABASE: CRYPTO_DB
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-
-    steps:
-      - name: Check out the code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Install dependencies (pinned in requirements.txt)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Fetch + load raw data
-        run: python pipelines/extract_load.py
-
-      - name: dbt build (clean -> marts -> tests)
-        working-directory: dbt
-        env:
-          DBT_PROFILES_DIR: .
-        run: dbt build
-
-      - name: Export dashboard data
-        run: python pipelines/export_dashboard_data.py
-
-      # Committing the fresh JSON triggers Netlify's rebuild, so the site
-      # updates itself right after the warehouse does.
-      - name: Commit fresh data
-        run: |
-          git config user.name "pipeline-bot"
-          git config user.email "actions@github.com"
-          git add dashboard/data
-          git diff --cached --quiet || git commit -m "data: refresh $(date -u +%F)"
-          git push
-
-      # Deploys the dashboard (with the fresh JSON from the export step)
-      # straight from the runner to Netlify's CDN. Skips cleanly until the
-      # NETLIFY_AUTH_TOKEN secret exists in the repo's vault.
-      - name: Deploy dashboard to Netlify
-        if: ${{ env.NETLIFY_AUTH_TOKEN != '' }}
-        run: npx --yes netlify-cli deploy --prod --dir dashboard --site d82d6d26-0dd7-4954-86c7-6264ae938f06
+  run:
+    uses: ./.github/workflows/run-pipeline.yml
+    secrets: inherit
+    permissions:
+      contents: write

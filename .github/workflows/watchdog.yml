@@ -1,20 +1,27 @@
-# The watchdog: runs AFTER the daily pipeline's window and fails loudly if
-# the pipeline hasn't succeeded recently. GitHub emails the repo owner on a
-# failed run — so a silently skipped cron (happened Oct 12) can never again
-# go unnoticed. Belt: this workflow. Suspenders: the dbt freshness test.
+# The watchdog: SELF-HEALING scheduler insurance.
+# GitHub's cron has skipped this repo's nights twice (Oct 12 and 13, 2026) —
+# schedules are best-effort and not dependable on their own. So:
+#   1. check: has the daily pipeline succeeded within the last 26 hours?
+#        yes -> green, done.
+#        no  -> fail loudly (GitHub emails the repo owner).
+#   2. heal: runs ONLY when check failed — it runs the full pipeline itself
+#      (same reusable workflow), so a missed night is cured within hours
+#      with no human and no extra credentials.
+# Plus the dbt freshness test (assert_data_is_fresh.sql) guards the data
+# layer itself. Belt, suspenders, and a spare shirt.
 
 name: Pipeline watchdog
 
 on:
   schedule:
-    - cron: "37 3 * * *"   # 03:37 UTC = 09:07 IST, after the 06:43 run
+    - cron: "37 3 * * *"   # 03:37 UTC = 09:07 IST, after the 06:43 window
   workflow_dispatch:
 
 permissions:
   actions: read
 
 jobs:
-  check-freshness:
+  check:
     runs-on: ubuntu-latest
     steps:
       - name: Fail if the daily pipeline hasn't succeeded within 26 hours
@@ -30,6 +37,14 @@ jobs:
           age_hours=$(( ( $(date +%s) - $(date -u -d "$last" +%s) ) / 3600 ))
           echo "age: ${age_hours}h (threshold 26h)"
           if [ "$age_hours" -gt 26 ]; then
-            echo "::error::Daily pipeline is stale by ${age_hours}h — check the Actions tab"
+            echo "::error::Daily pipeline is stale by ${age_hours}h — self-heal job will now run it"
             exit 1
           fi
+
+  heal:
+    needs: check
+    if: failure()
+    uses: ./.github/workflows/run-pipeline.yml
+    secrets: inherit
+    permissions:
+      contents: write

@@ -60,8 +60,29 @@ interview story + optional dbt-docs page.
 **Oct 12:** `Docs/` folder added — `Crypto-ELT-Project-Walkthrough.pdf`
 (plain-language project walkthrough + every DE concept + interview Q&A;
 source `project-walkthrough.html`, rendered via headless Edge
-`--headless=new --print-to-pdf`). Kept local-only until user decides whether
-to publish study notes in the repo.
+`--headless=new --print-to-pdf`, needs `--user-data-dir` for profile lock).
+Expanded Oct 13 to the detailed 12-chapter edition (458 KB).
+
+**Oct 13 — hardening round (pre-LinkedIn flaw audit), all verified:**
+- `dbt/tests/assert_data_is_fresh.sql` — build FAILS if fact data >2 days old
+  (the Oct-12 cron-skip incident, turned into a guard). Tests now 16.
+- `.github/workflows/watchdog.yml` — 03:37 UTC cron fails loudly (email) if no
+  successful daily run within 26h. Belt + suspenders with the test above.
+- `fact_market_snapshots` → incremental (delete+insert on `price_date`,
+  3-day lookback). Two consecutive local builds: 21/21 PASS both times.
+- `.github/workflows/ci.yml` — on push/PR: `dbt parse` syntax gate + pytest.
+- `tests/test_extract_load.py` — 3 mocked unit tests for retry/backoff.
+- `requirements.txt` + pip caching in both workflows.
+- `HISTORY_DAYS` 90 → 365 (probed: free tier allows a year). Fact 919 →
+  3,617 rows (2025-10-14 → 2026-10-13); dim_date 92 → 365; all "90 days"
+  copy updated (README, docs, sources.yml, export docstring).
+- Docs/ PDF went public in this push (swept by git add -A; flagged to user).
+
+**Known limits, documented not fixed:** Snowflake trial expires ~Nov 8
+(repo reproduces a fresh account in ~10 min); dim_coins carries time-varying
+attributes (type-1 current-state dim — SCD2 via dbt snapshots is the stated
+future work); API rate limits cap breadth at top-50/10; Netlify auto-deploy
+awaits NETLIFY_AUTH_TOKEN.
 
 ---
 
